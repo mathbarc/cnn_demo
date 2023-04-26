@@ -1,1 +1,3 @@
 **/dataset
+**.onnx
+**/__pycache__
