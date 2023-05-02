@@ -1,7 +1,8 @@
 import torch
-import cv2
+import torchvision
+import PIL
 import os
-from tqdm import tqdm
+import numpy
 
 from enum import Enum
 
@@ -14,7 +15,7 @@ class DataloaderMode(Enum):
 
 class YoloDatasetLoader(torch.utils.data.Dataset):
 
-    def __init__(self, dataset_path, transform, mode = DataloaderMode.TRAIN, device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
+    def __init__(self, dataset_path:str, transform:torchvision.transforms.Compose, batch_size:int=16, mode = DataloaderMode.TRAIN):
 
         if mode == DataloaderMode.TRAIN:
             dataset_file = "train.txt"
@@ -23,17 +24,22 @@ class YoloDatasetLoader(torch.utils.data.Dataset):
         elif mode == DataloaderMode.TEST:
             dataset_file = "test.txt"
 
+        self.batch_size = batch_size
+
         with open(os.path.join(dataset_path,"classes.txt"), 'r') as file:
             self.labels = file.readlines()
             i = 0
             while i<len(self.labels):
-                self.labels[i] = self.labels[i].rstrip()
+                labels = self.labels[i].rstrip()
+                self.labels[i] = labels
                 i+=1
 
         with open(os.path.join(dataset_path,dataset_file), 'r') as file:
             file_list = file.readlines()
 
         print(f"Checking images on dataset folder: {dataset_path}")
+
+        self.n_annotations = []
 
         i = 0
         while(i<len(file_list)):
@@ -49,27 +55,38 @@ class YoloDatasetLoader(torch.utils.data.Dataset):
                 logging.error(f"{image_name} does not have annotation!")
                 del file_list[i]
                 i-=1
+            else:
+                with open(annotation_path, "r") as ann_file:
+                    lines = ann_file.readlines()
+                    self.n_annotations.append(len(lines))
             i+=1
 
+
+        self.n_annotations = numpy.unique(self.n_annotations)
         self.dataset_path = dataset_path
         self.file_list = file_list
         self.transform = transform
-        self.device = device
 
     def __getitem__(self,index):
         image_name = self.file_list[index]
         image_path = os.path.join(self.dataset_path, image_name)
         annotation_path = os.path.splitext(image_path)[0]+".txt"
 
-        img = self.transform(cv2.imread(image_path))
+        img = self.transform(PIL.Image.open(image_path))
         annotations = YoloDatasetLoader._get_annotations_from_file(annotation_path, len(self.labels))
 
         return img, annotations
     
     def __len__(self):
         return len(self.file_list)
-        
+    
+    def get_train_indices(self):
+        sel_length = numpy.random.choice(self.n_annotations)
+        all_indices = numpy.where([self.n_annotations[i] == sel_length for i in numpy.arange(len(self.n_annotations))])[0]
+        indices = list(numpy.random.choice(all_indices, size=self.batch_size))
+        return indices
 
+        
     def _get_annotations_from_file(annotation_path:str, n_classes:int):
 
         with open(annotation_path,"r") as annotation_file:
@@ -88,7 +105,7 @@ class YoloDatasetLoader(torch.utils.data.Dataset):
             annotations[index][1] = y - deltaY
             annotations[index][2] = x + deltaX            
             annotations[index][3] = y + deltaY
-            annotations[index][3+label] = 1
+            annotations[index][4+label] = 1
         return annotations
 
 
@@ -99,10 +116,12 @@ if __name__=="__main__":
 
 
     dataset = YoloDatasetLoader("obj_detection/dataset", model.get_transforms_for_obj_detector_with_efficientnet_backbone())
+    indexes = dataset.get_train_indices()
 
-
-    print(dataset[0])
+    print(dataset.labels)
     print(len(dataset))
+    print(indexes[0:10])
+    print(dataset[indexes[0]])
         
 
 
