@@ -113,10 +113,21 @@ class YoloDatasetLoader(torch.utils.data.Dataset):
 if __name__=="__main__":
 
     import model
+    import cv2
 
-
-    dataset = YoloDatasetLoader("obj_detection/dataset", model.get_transforms_for_obj_detector_with_efficientnet_backbone())
+    dataset = YoloDatasetLoader("obj_detection/dataset", model.get_transforms_for_obj_detector())
     indexes = dataset.get_train_indices()
+
+    img, anns = dataset[1]
+
+    img = (img.permute(1,2,0).numpy()*255).astype(numpy.uint8).copy()
+
+    for ann in anns:
+        point = (ann[0:4].numpy()*512).astype(int)
+        cv2.rectangle(img,(point[0],point[1], point[2]-point[0],point[3]-point[1]),(0,255,0),3)
+    
+    cv2.imshow("img", img)
+    cv2.waitKey()
 
     print(dataset.labels)
     print(len(dataset))
