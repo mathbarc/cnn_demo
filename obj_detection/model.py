@@ -10,10 +10,10 @@ def create_output_layer(n_inputs, n_classes, objects_per_cell):
 
     output_layer = torch.nn.Sequential()
     
-    output_layer.add_module("prepare_features",torch.nn.Conv2d(n_inputs, 512, (1,1), (1,1), "same"))
-    output_layer.add_module("prepare_features_activition",torch.nn.LeakyReLU())
+    output_layer.add_module("prepare_features",torch.nn.Conv2d(n_inputs, 512, (1,1), (1,1)))
+    output_layer.add_module("prepare_features_activition",torch.nn.SiLU())
     output_layer.add_module("prepare_features_batchnorm",torch.nn.BatchNorm2d(512))
-    output_layer.add_module("gen_output_grid",torch.nn.Conv2d(512, output_layer_channels, (1,1), (1,1), "same"))
+    output_layer.add_module("gen_output_grid",torch.nn.Conv2d(512, output_layer_channels, (1,1), (1,1)))
 
     return output_layer
 
@@ -37,37 +37,37 @@ def create_potato_model(n_classes:int, objects_per_cell:int=1):
     cnn = torch.nn.Sequential()
 
     feature_extractor = torch.nn.Sequential()
-    feature_extractor.add_module("0_conv",torch.nn.Conv2d(3, 16,(3,3),(1,1),"same"))
-    feature_extractor.add_module("0_act",torch.nn.LeakyReLU())
+    feature_extractor.add_module("0_conv",torch.nn.Conv2d(3, 16,(3,3),(1,1)))
+    feature_extractor.add_module("0_act",torch.nn.SiLU())
     feature_extractor.add_module("0_batch_norm",torch.nn.BatchNorm2d(16))
     feature_extractor.add_module("0_pool",torch.nn.MaxPool2d((2,2),(2,2)))
 
-    feature_extractor.add_module("1_conv",torch.nn.Conv2d(16, 32,(3,3),(1,1),"same"))
-    feature_extractor.add_module("1_act",torch.nn.LeakyReLU())
+    feature_extractor.add_module("1_conv",torch.nn.Conv2d(16, 32,(3,3),(1,1)))
+    feature_extractor.add_module("1_act",torch.nn.SiLU())
     feature_extractor.add_module("1_batch_norm",torch.nn.BatchNorm2d(32))
     feature_extractor.add_module("1_pool",torch.nn.MaxPool2d((2,2),(2,2)))
 
-    feature_extractor.add_module("2_conv",torch.nn.Conv2d(32, 64,(3,3),(1,1),"same"))
-    feature_extractor.add_module("2_act",torch.nn.LeakyReLU())
+    feature_extractor.add_module("2_conv",torch.nn.Conv2d(32, 64,(3,3),(1,1)))
+    feature_extractor.add_module("2_act",torch.nn.SiLU())
     feature_extractor.add_module("2_batch_norm",torch.nn.BatchNorm2d(64))
     feature_extractor.add_module("2_pool",torch.nn.MaxPool2d((2,2),(2,2)))
 
-    feature_extractor.add_module("3_conv",torch.nn.Conv2d(64, 128,(3,3),(1,1),"same"))
-    feature_extractor.add_module("3_act",torch.nn.LeakyReLU())
+    feature_extractor.add_module("3_conv",torch.nn.Conv2d(64, 128,(3,3),(1,1)))
+    feature_extractor.add_module("3_act",torch.nn.SiLU())
     feature_extractor.add_module("3_batch_norm",torch.nn.BatchNorm2d(128))
     feature_extractor.add_module("3_pool",torch.nn.MaxPool2d((2,2),(2,2)))
 
-    feature_extractor.add_module("4_conv",torch.nn.Conv2d(128, 256,(3,3),(1,1),"same"))
-    feature_extractor.add_module("4_act",torch.nn.LeakyReLU())
+    feature_extractor.add_module("4_conv",torch.nn.Conv2d(128, 256,(3,3),(1,1)))
+    feature_extractor.add_module("4_act",torch.nn.SiLU())
     feature_extractor.add_module("4_batch_norm",torch.nn.BatchNorm2d(256))
     feature_extractor.add_module("4_pool",torch.nn.MaxPool2d((2,2),(2,2)))
 
-    feature_extractor.add_module("5_conv",torch.nn.Conv2d(256, 512,(3,3),(1,1),"same"))
-    feature_extractor.add_module("5_act",torch.nn.LeakyReLU())
+    feature_extractor.add_module("5_conv",torch.nn.Conv2d(256, 512,(3,3),(1,1)))
+    feature_extractor.add_module("5_act",torch.nn.SiLU())
     feature_extractor.add_module("5_batch_norm",torch.nn.BatchNorm2d(512))
 
-    feature_extractor.add_module("out",torch.nn.Conv2d(512,1024,(3,3),(1,1),"same"))
-    feature_extractor.add_module("out_act",torch.nn.LeakyReLU())
+    feature_extractor.add_module("out",torch.nn.Conv2d(512,1024,(3,3),(1,1)))
+    feature_extractor.add_module("out_act",torch.nn.SiLU())
     feature_extractor.add_module("out_batch_norm",torch.nn.BatchNorm2d(1024))
 
     output_layer = create_output_layer(1024,n_classes, objects_per_cell)
@@ -94,6 +94,9 @@ def calc_obj_detection_loss(detections: torch.Tensor, annotations: torch.Tensor,
     obj_detection_loss = 0
     classification_loss = 0
 
+    n_annotations = annotations.size()[1]
+    n_all_annotations = n_batches*n_annotations
+
     detections = detections.permute((0,2,3,1))
 
     for batch_id in range(n_batches):
@@ -103,7 +106,7 @@ def calc_obj_detection_loss(detections: torch.Tensor, annotations: torch.Tensor,
         batch_obj_detection_loss = 0
         batch_classification_loss = 0
 
-        for ann_id in range(annotations.size()[1]):
+        for ann_id in range(n_annotations):
             ann_box = annotations[batch_id, ann_id, 0:4].view(1,4)
             ann_class = annotations[batch_id, ann_id, 4:]
 
@@ -122,8 +125,8 @@ def calc_obj_detection_loss(detections: torch.Tensor, annotations: torch.Tensor,
             best_class = classes[best_iou,:]
 
 
-            batch_iou_loss += (ann_box-best_box).pow(2).sum()
-            batch_classification_loss += (ann_class-best_class).pow(2).sum()
+            batch_iou_loss += torchvision.ops.complete_box_iou_loss(ann_box,best_box,reduction="sum")
+            batch_classification_loss += torch.nn.functional.binary_cross_entropy(ann_class,best_class,reduction="sum")
             
             detections_associated_with_annotations.append((cellY, cellX, best_iou))
         
@@ -134,17 +137,17 @@ def calc_obj_detection_loss(detections: torch.Tensor, annotations: torch.Tensor,
                     pred = detection[mask_id,4].view(1)
                     if (cellY,cellX,mask_id) in detections_associated_with_annotations:
                         target = torch.ones(pred.size()).to(pred.device)
-                        batch_obj_detection_loss+=(target-pred).pow(2)
+                        batch_obj_detection_loss+=torch.nn.functional.mse_loss(target,pred,reduction="sum")
                     else:
                         target = torch.zeros(pred.size()).to(pred.device)
-                        batch_obj_detection_loss+=no_obj_gain*((target-pred).pow(2))
+                        batch_obj_detection_loss+=no_obj_gain*torch.nn.functional.mse_loss(target,pred,reduction="sum")
 
         iou_loss += batch_iou_loss
         classification_loss += batch_classification_loss
         obj_detection_loss += batch_obj_detection_loss
             
 
-    return coordinates_gain*iou_loss, obj_detection_loss, classification_loss
+    return (coordinates_gain/n_all_annotations)*iou_loss, obj_detection_loss/n_all_annotations, classification_loss/n_all_annotations
 
 
     

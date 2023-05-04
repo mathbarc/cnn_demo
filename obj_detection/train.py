@@ -24,7 +24,7 @@ def train_object_detector(cnn:torch.nn.Module, dataloader:torch.utils.data.DataL
 
     optimizer = torch.optim.Adam(cnn.parameters(),lr)
 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, total_step/100,0.99)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [100,1000,3000,5000],0.1)
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
@@ -72,14 +72,14 @@ def train_object_detector(cnn:torch.nn.Module, dataloader:torch.utils.data.DataL
 
             iou_loss, obj_detection_loss, classification_loss = model.calc_obj_detection_loss(outputs, annotations, n_objects_per_cell, coordinates_gain=coordinates_loss_gain, no_obj_gain=no_obj_loss_gain)
             
-            total_loss = iou_loss + obj_detection_loss + classification_loss
+            total_loss = (iou_loss + obj_detection_loss + classification_loss)/batchs_per_step
             acc_loss += total_loss.item()
             total_loss.backward()
             optimizer.step()
             
-            acc_iou_loss += iou_loss.item()
-            acc_class_loss += classification_loss.item()
-            acc_obj_detection += obj_detection_loss.item()
+            acc_iou_loss += iou_loss.item()/batchs_per_step
+            acc_class_loss += classification_loss.item()/batchs_per_step
+            acc_obj_detection += obj_detection_loss.item()/batchs_per_step
 
         mlflow.log_metrics({"total_loss":acc_loss, "iou_loss":acc_iou_loss, "class_loss":acc_class_loss, "object_presence_loss":acc_obj_detection, "lr":scheduler.get_last_lr()[0]}, i_step)
         
@@ -103,7 +103,7 @@ if __name__=="__main__":
     warnings.filterwarnings("ignore", category=DeprecationWarning) 
     warnings.filterwarnings("ignore", category=UserWarning) 
 
-    n_objects_per_cell = 1
+    n_objects_per_cell = 3
     batch_size = 64
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_potato_model(2,n_objects_per_cell)
@@ -119,6 +119,6 @@ if __name__=="__main__":
                                                                               batch_size=dataset.batch_size,
                                                                               drop_last=False))
 
-    train_object_detector(cnn, dataloader, 10000, 1e-3,1,n_objects_per_cell)
+    train_object_detector(cnn, dataloader, 10000, 1e-2,1,n_objects_per_cell)
     
     
