@@ -37,36 +37,32 @@ def create_potato_model(n_classes:int, objects_per_cell:int=1):
     cnn = torch.nn.Sequential()
 
     feature_extractor = torch.nn.Sequential()
-    feature_extractor.add_module("0_conv",torch.nn.Conv2d(3, 16,(3,3),(1,1)))
+    feature_extractor.add_module("0_conv",torch.nn.Conv2d(3, 8,(3,3),(1,1)))
     feature_extractor.add_module("0_act",torch.nn.SiLU())
-    feature_extractor.add_module("0_batch_norm",torch.nn.BatchNorm2d(16))
+    feature_extractor.add_module("0_batch_norm",torch.nn.BatchNorm2d(8))
     feature_extractor.add_module("0_pool",torch.nn.MaxPool2d((2,2),(2,2)))
 
-    feature_extractor.add_module("1_conv",torch.nn.Conv2d(16, 32,(3,3),(1,1)))
+    feature_extractor.add_module("1_conv",torch.nn.Conv2d(8, 16,(3,3),(1,1)))
     feature_extractor.add_module("1_act",torch.nn.SiLU())
-    feature_extractor.add_module("1_batch_norm",torch.nn.BatchNorm2d(32))
+    feature_extractor.add_module("1_batch_norm",torch.nn.BatchNorm2d(16))
     feature_extractor.add_module("1_pool",torch.nn.MaxPool2d((2,2),(2,2)))
 
-    feature_extractor.add_module("2_conv",torch.nn.Conv2d(32, 64,(3,3),(1,1)))
+    feature_extractor.add_module("2_conv",torch.nn.Conv2d(16, 32,(3,3),(1,1)))
     feature_extractor.add_module("2_act",torch.nn.SiLU())
-    feature_extractor.add_module("2_batch_norm",torch.nn.BatchNorm2d(64))
+    feature_extractor.add_module("2_batch_norm",torch.nn.BatchNorm2d(32))
     feature_extractor.add_module("2_pool",torch.nn.MaxPool2d((2,2),(2,2)))
 
-    feature_extractor.add_module("3_conv",torch.nn.Conv2d(64, 128,(3,3),(1,1)))
+    feature_extractor.add_module("3_conv",torch.nn.Conv2d(32, 64,(3,3),(1,1)))
     feature_extractor.add_module("3_act",torch.nn.SiLU())
-    feature_extractor.add_module("3_batch_norm",torch.nn.BatchNorm2d(128))
+    feature_extractor.add_module("3_batch_norm",torch.nn.BatchNorm2d(64))
     feature_extractor.add_module("3_pool",torch.nn.MaxPool2d((2,2),(2,2)))
 
-    feature_extractor.add_module("4_conv",torch.nn.Conv2d(128, 256,(3,3),(1,1)))
+    feature_extractor.add_module("4_conv",torch.nn.Conv2d(64, 256,(3,3),(1,1)))
     feature_extractor.add_module("4_act",torch.nn.SiLU())
     feature_extractor.add_module("4_batch_norm",torch.nn.BatchNorm2d(256))
-    feature_extractor.add_module("4_pool",torch.nn.MaxPool2d((2,2),(2,2)))
+    feature_extractor.add_module("4_pool",torch.nn.MaxPool2d((4,4),(4,4)))
 
-    feature_extractor.add_module("5_conv",torch.nn.Conv2d(256, 512,(3,3),(1,1)))
-    feature_extractor.add_module("5_act",torch.nn.SiLU())
-    feature_extractor.add_module("5_batch_norm",torch.nn.BatchNorm2d(512))
-
-    feature_extractor.add_module("out",torch.nn.Conv2d(512,1024,(3,3),(1,1)))
+    feature_extractor.add_module("out",torch.nn.Conv2d(256,1024,(3,3),(1,1)))
     feature_extractor.add_module("out_act",torch.nn.SiLU())
     feature_extractor.add_module("out_batch_norm",torch.nn.BatchNorm2d(1024))
 
@@ -125,7 +121,7 @@ def calc_obj_detection_loss(detections: torch.Tensor, annotations: torch.Tensor,
             best_class = classes[best_iou,:]
 
 
-            batch_iou_loss += torchvision.ops.complete_box_iou_loss(ann_box,best_box,reduction="sum")
+            batch_iou_loss += torch.nn.functional.mse_loss(ann_box,best_box,reduction="sum")
             batch_classification_loss += torch.nn.functional.mse_loss(ann_class,best_class,reduction="sum")
             
             detections_associated_with_annotations.append((cellY, cellX, best_iou))
