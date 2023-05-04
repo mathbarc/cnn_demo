@@ -3,11 +3,12 @@ import numpy
 import time
 
 labels =["crop", "weed"]
-net = cv2.dnn.readNetFromONNX("object_detection_2000.onnx")
+net = cv2.dnn.readNetFromONNX("object_detection_last.onnx")
 
-print(net.getFLOPS((1,3,512,512))*10e-9, "BFLOPs")
+flops = net.getFLOPS((1,3,512,512))*10e-9
+print(round(flops, 3), "BFLOPs")
 
-img = cv2.imread("obj_detection/dataset/./agri_data/data/agri_0_6258.jpeg")
+img = cv2.imread("obj_detection/dataset/./agri_data/data/agri_0_5366.jpeg")
 input_img = cv2.dnn.blobFromImage(img, scalefactor=1./255.,size=(512,512), swapRB=True)
 
 start = time.time()
@@ -25,7 +26,7 @@ boxes = [ (int(img.shape[1]*obj[0]), int(img.shape[0]*obj[1]), int(img.shape[1]*
 classes = [obj[5:] for obj in objs]
 prob = [obj[4] for obj in objs]
 
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.5, 0.4)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.3, 0.4)
 
 for box_id in indexes:
     cv2.rectangle(img, boxes[box_id], (0,255,0),3)

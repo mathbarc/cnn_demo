@@ -24,7 +24,8 @@ def train_object_detector(cnn:torch.nn.Module, dataloader:torch.utils.data.DataL
 
     optimizer = torch.optim.Adam(cnn.parameters(),lr)
 
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [100,1000,3000,5000],0.1)
+    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [100,1000,3000,5000],0.1)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-6)
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
@@ -105,8 +106,8 @@ if __name__=="__main__":
 
     n_objects_per_cell = 3
     batch_size = 8
-    cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
-    # cnn = model.create_potato_model(2,n_objects_per_cell)
+    # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
+    cnn = model.create_potato_model(2,n_objects_per_cell)
 
     transforms = model.get_transforms_for_obj_detector()
     dataset = data_loader.YoloDatasetLoader("obj_detection/dataset", transforms, batch_size)

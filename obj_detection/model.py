@@ -10,9 +10,7 @@ def create_output_layer(n_inputs, n_classes, objects_per_cell):
 
     output_layer = torch.nn.Sequential()
     
-    output_layer.add_module("prepare_features",torch.nn.Conv2d(n_inputs, 512, (1,1), (1,1)))
-    output_layer.add_module("prepare_features_activition",torch.nn.SiLU())
-    output_layer.add_module("prepare_features_batchnorm",torch.nn.BatchNorm2d(512))
+    output_layer.add_module("prepare_features",torchvision.ops.Conv2dNormActivation(n_inputs, 512,(1,1), (1,1), activation_layer=torch.nn.SiLU))
     output_layer.add_module("gen_output_grid",torch.nn.Conv2d(512, output_layer_channels, (1,1), (1,1)))
 
     return output_layer
@@ -37,34 +35,18 @@ def create_potato_model(n_classes:int, objects_per_cell:int=1):
     cnn = torch.nn.Sequential()
 
     feature_extractor = torch.nn.Sequential()
-    feature_extractor.add_module("0_conv",torch.nn.Conv2d(3, 8,(3,3),(1,1)))
-    feature_extractor.add_module("0_act",torch.nn.SiLU())
-    feature_extractor.add_module("0_batch_norm",torch.nn.BatchNorm2d(8))
+
+    feature_extractor.add_module("0_conv",torchvision.ops.Conv2dNormActivation(3,8,(3,3),(1,1)))
     feature_extractor.add_module("0_pool",torch.nn.MaxPool2d((2,2),(2,2)))
-
-    feature_extractor.add_module("1_conv",torch.nn.Conv2d(8, 16,(3,3),(1,1)))
-    feature_extractor.add_module("1_act",torch.nn.SiLU())
-    feature_extractor.add_module("1_batch_norm",torch.nn.BatchNorm2d(16))
+    feature_extractor.add_module("1_conv",torchvision.ops.Conv2dNormActivation(8,16,(3,3),(1,1)))
     feature_extractor.add_module("1_pool",torch.nn.MaxPool2d((2,2),(2,2)))
-
-    feature_extractor.add_module("2_conv",torch.nn.Conv2d(16, 32,(3,3),(1,1)))
-    feature_extractor.add_module("2_act",torch.nn.SiLU())
-    feature_extractor.add_module("2_batch_norm",torch.nn.BatchNorm2d(32))
+    feature_extractor.add_module("2_conv",torchvision.ops.Conv2dNormActivation(16,32,(3,3),(1,1)))
     feature_extractor.add_module("2_pool",torch.nn.MaxPool2d((2,2),(2,2)))
-
-    feature_extractor.add_module("3_conv",torch.nn.Conv2d(32, 64,(3,3),(1,1)))
-    feature_extractor.add_module("3_act",torch.nn.SiLU())
-    feature_extractor.add_module("3_batch_norm",torch.nn.BatchNorm2d(64))
+    feature_extractor.add_module("3_conv",torchvision.ops.Conv2dNormActivation(32,64,(3,3),(1,1)))
     feature_extractor.add_module("3_pool",torch.nn.MaxPool2d((2,2),(2,2)))
-
-    feature_extractor.add_module("4_conv",torch.nn.Conv2d(64, 256,(3,3),(1,1)))
-    feature_extractor.add_module("4_act",torch.nn.SiLU())
-    feature_extractor.add_module("4_batch_norm",torch.nn.BatchNorm2d(256))
+    feature_extractor.add_module("4_conv",torchvision.ops.Conv2dNormActivation(64,256,(3,3),(1,1)))
     feature_extractor.add_module("4_pool",torch.nn.MaxPool2d((4,4),(4,4)))
-
-    feature_extractor.add_module("out",torch.nn.Conv2d(256,1024,(3,3),(1,1)))
-    feature_extractor.add_module("out_act",torch.nn.SiLU())
-    feature_extractor.add_module("out_batch_norm",torch.nn.BatchNorm2d(1024))
+    feature_extractor.add_module("5_conv",torchvision.ops.Conv2dNormActivation(256, 1024,(3,3),(1,1)))
 
     output_layer = create_output_layer(1024,n_classes, objects_per_cell)
 
