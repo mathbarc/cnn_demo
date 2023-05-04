@@ -126,7 +126,7 @@ def calc_obj_detection_loss(detections: torch.Tensor, annotations: torch.Tensor,
 
 
             batch_iou_loss += torchvision.ops.complete_box_iou_loss(ann_box,best_box,reduction="sum")
-            batch_classification_loss += torch.nn.functional.binary_cross_entropy(ann_class,best_class,reduction="sum")
+            batch_classification_loss += torch.nn.functional.mse_loss(ann_class,best_class,reduction="sum")
             
             detections_associated_with_annotations.append((cellY, cellX, best_iou))
         
