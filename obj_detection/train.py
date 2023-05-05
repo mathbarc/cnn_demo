@@ -4,9 +4,9 @@ import torch
 import torch.utils.data
 import torch.utils.data.sampler
 
-import numpy
+from typing import Tuple
 
-import torchvision
+import torchmetrics.detection
 
 from tqdm import tqdm
 
@@ -16,15 +16,49 @@ import data_loader
 import mlflow
 
 
+def calculate_metrics(cnn:torch.nn.Module, dataset:data_loader.YoloDatasetLoader, objects_per_cell:int, device:torch.device):
+    cnn.eval()
 
+    results = []
+    targets = []
 
-def train_object_detector(cnn:torch.nn.Module, dataloader:torch.utils.data.DataLoader, total_step:int, lr:float=0.001, batchs_per_step=4, n_objects_per_cell=1, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"), coordinates_loss_gain:float=5., no_obj_loss_gain:float=.5):
+    metrics_calculator = torchmetrics.detection.MeanAveragePrecision()
+
+    with torch.no_grad():
+        for img, ann in dataset:     
+            img = torch.unsqueeze(img, 0).to(device)
+            outputs = cnn(img).permute(0,2,3,1)
+            output_shape = outputs.size()
+            
+            outputs = outputs.cpu().reshape(output_shape[1]*output_shape[2]*objects_per_cell, int(output_shape[3]/objects_per_cell))
+            
+
+            result = {}
+            result["boxes"] = outputs[:,:4]
+            result["scores"] = outputs[:,4]
+            result["labels"] = torch.argmax(outputs[:,5:],1)
+            results.append(result)
+
+            target = {}
+            target["boxes"] = ann[:,:4]
+            target["labels"] = torch.argmax(ann[:,4:],1)
+            targets.append(target)
+
+        metrics = metrics_calculator.forward(results, targets)
+    cnn.train()
+    return metrics["map"].item()
+
+def save_model(cnn:torch.nn.Module, name:str, type:str, device):
+    mlflow.pytorch.log_model(cnn, f"{name}/{type}")
+    input_sample = torch.ones((1,3,512,512)).to(device)
+    torch.onnx.export(cnn, input_sample, f"{name}_{type}.onnx", input_names=["features"],output_names=["output"])
+
+def train_object_detector(cnn:torch.nn.Module, dataloader:torch.utils.data.DataLoader, validation_dataset:data_loader.YoloDatasetLoader, total_step:int, lr:float=0.001, batchs_per_step=4, n_objects_per_cell=1, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"), coordinates_loss_gain:float=5., no_obj_loss_gain:float=.5):
 
     cnn = cnn.to(device)
 
     optimizer = torch.optim.Adam(cnn.parameters(),lr)
 
-    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [100,1000,3000,5000],0.1)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-6)
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
@@ -47,6 +81,7 @@ def train_object_detector(cnn:torch.nn.Module, dataloader:torch.utils.data.DataL
     }
 
     mlflow.log_params(training_params)
+    best_map = 0
 
     cnn.train()
         
@@ -81,15 +116,23 @@ def train_object_detector(cnn:torch.nn.Module, dataloader:torch.utils.data.DataL
             acc_iou_loss += iou_loss.item()/batchs_per_step
             acc_class_loss += classification_loss.item()/batchs_per_step
             acc_obj_detection += obj_detection_loss.item()/batchs_per_step
-
-        mlflow.log_metrics({"total_loss":acc_loss, "iou_loss":acc_iou_loss, "class_loss":acc_class_loss, "object_presence_loss":acc_obj_detection, "lr":scheduler.get_last_lr()[0]}, i_step)
         
+
+        metrics = {"total_loss":acc_loss, "iou_loss":acc_iou_loss, "class_loss":acc_class_loss, "object_presence_loss":acc_obj_detection, "lr":scheduler.get_last_lr()[0]}
+        if(i_step%100 == 99):
+            performance_metrics = calculate_metrics(cnn, dataset_valid, n_objects_per_cell, device)
+            metrics["valid_map"] = performance_metrics
+            if(best_map < performance_metrics):
+                best_map = performance_metrics
+                save_model(cnn, "object_detection", "best", device)
+
+        mlflow.log_metrics(metrics, i_step)
+
         scheduler.step()
 
         if(i_step%100 == 99):
-            mlflow.pytorch.log_model(cnn, "last/object_detection")
-            input_sample = torch.ones((1,3,512,512)).to(device)
-            torch.onnx.export(cnn, input_sample, "object_detection_last.onnx", input_names=["features"],output_names=["output"])
+            save_model(cnn, "object_detection", "last", device)
+            
 
         if(i_step%1000 == 999):
             mlflow.pytorch.log_model(cnn, f"{i_step+1}/object_detection")
@@ -105,21 +148,23 @@ if __name__=="__main__":
     warnings.filterwarnings("ignore", category=UserWarning) 
 
     n_objects_per_cell = 3
-    batch_size = 8
+    batch_size = 32
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_potato_model(2,n_objects_per_cell)
 
     transforms = model.get_transforms_for_obj_detector()
-    dataset = data_loader.YoloDatasetLoader("obj_detection/dataset", transforms, batch_size)
+    dataset_train = data_loader.YoloDatasetLoader("obj_detection/dataset", transforms, batch_size)
+    dataset_valid = data_loader.YoloDatasetLoader("obj_detection/dataset", transforms, batch_size, mode=data_loader.DataloaderMode.VALID)
+    
 
-    indices = dataset.get_train_indices()
+    indices = dataset_train.get_train_indices()
 
     initial_sampler = torch.utils.data.sampler.SubsetRandomSampler(indices=indices)
 
-    dataloader = torch.utils.data.DataLoader(dataset=dataset, num_workers=8, batch_sampler=torch.utils.data.sampler.BatchSampler(sampler=initial_sampler,
-                                                                              batch_size=dataset.batch_size,
+    dataloader = torch.utils.data.DataLoader(dataset=dataset_train, num_workers=8, batch_sampler=torch.utils.data.sampler.BatchSampler(sampler=initial_sampler,
+                                                                              batch_size=dataset_train.batch_size,
                                                                               drop_last=False))
 
-    train_object_detector(cnn, dataloader, 4000, 1e-2,4,n_objects_per_cell)
+    train_object_detector(cnn, dataloader, dataset_valid, 10000, 1e-2,1,n_objects_per_cell)
     
     
