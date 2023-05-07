@@ -21,7 +21,7 @@ def create_output_layer(
     )
     output_layer.add_module(
         "gen_output_grid",
-        torch.nn.Conv2d(512, output_layer_channels, (1, 1), (1, 1), (1, 1)),
+        torch.nn.Conv2d(512, output_layer_channels, (1, 1), (1, 1)),
     )
 
     return output_layer
@@ -97,14 +97,13 @@ def create_yolo_v2_model(
             256, 512, (3, 3), (1, 1), activation_layer=activation
         ),
     )
-    feature_extractor.add_module("5_pool", torch.nn.MaxPool2d((2, 2), (2, 2)))
+    feature_extractor.add_module("5_pool", torch.nn.MaxPool2d((2, 2), (1, 1)))
     feature_extractor.add_module(
         "6_conv",
         torchvision.ops.Conv2dNormActivation(
             512, 1024, (3, 3), (1, 1), activation_layer=activation
         ),
     )
-    feature_extractor.add_module("6_pool", torch.nn.MaxPool2d((2, 2), (1, 1)))
 
     output_layer = create_output_layer(1024, n_classes, objects_per_cell, activation)
 
@@ -142,39 +141,39 @@ def calc_obj_detection_loss(
         n_batches, grid_size[0] * grid_size[1] * n_objects_per_cell, -1
     )
 
-    target_positive = torch.ones((1)).to(detections.device)
-    target_negative = torch.zeros((1)).to(detections.device)
-
     for batch_id in range(n_batches):
         batch_iou_loss = 0
         batch_classification_loss = 0
         batch_obj_detection_loss = 0
 
         detections_associated_with_annotations = torch.zeros(
-            (detections.shape[1], detections.shape[2], n_objects_per_cell)
-        )
+            (detections.shape[1], detections.shape[2], n_objects_per_cell),requires_grad=False
+        ).to(detections.device)
+
+        # detections_associated_with_annotations = {}
 
         for ann_id in range(n_annotations):
             ann_box = annotations[batch_id, ann_id, 0:4].view(1, 4)
-            ann_class = torch.nn.functional.softmax(annotations[batch_id, ann_id, 4:])
+            ann_class = annotations[batch_id, ann_id, 4:]
 
             cellX = int((ann_box[0, 0] + ann_box[0, 2]) * 0.5 * grid_size[1])
             cellY = int((ann_box[0, 1] + ann_box[0, 3]) * 0.5 * grid_size[0])
 
             objs = detections[batch_id, cellY, cellX, :].view(n_objects_per_cell, -1)
-            boxes = objs[:, 0:4]
-            classes = objs[:, 5:]
+            boxes = torch.nn.functional.sigmoid(objs[:, 0:4])
+            classes = torch.nn.functional.softmax(objs[:, 5:])
 
             iou = torchvision.ops.box_iou(boxes, ann_box)
-            best_iou = iou.argmax().item()
+            best_iou_id = iou.argmax().item()
 
-            best_box = boxes[best_iou, :].view(1, 4)
-            best_class = torch.nn.functional.softmax(classes[best_iou, :])
+            best_iou = iou[best_iou_id]
+            best_box = boxes[best_iou_id, :]
+            best_class = classes[best_iou_id, :]
 
             batch_iou_loss += (ann_box - best_box).pow(2).sum()
             batch_classification_loss += (ann_class - best_class).pow(2).sum()
 
-            detections_associated_with_annotations[cellY, cellX, best_iou] = 1
+            detections_associated_with_annotations[cellY, cellX, best_iou_id] = best_iou.item()
 
         iou_loss += batch_iou_loss
         classification_loss += batch_classification_loss
@@ -184,17 +183,18 @@ def calc_obj_detection_loss(
                 start = (cellY * grid_size[1] + cellX) * n_objects_per_cell
                 end = (cellY * grid_size[1] + cellX + 1) * n_objects_per_cell
                 detection = all_objects[batch_id, start:end, :]
-                for mask_id in range(n_objects_per_cell):
-                    pred = detection[mask_id, 4].view(1)
-                    if detections_associated_with_annotations[cellY, cellX, mask_id]:
+                for object_id in range(n_objects_per_cell):
+                    pred = torch.nn.functional.sigmoid(detection[object_id, 4].view(1))
+                    target = detections_associated_with_annotations[cellY, cellX, object_id]
+                    if target:
                         batch_obj_detection_loss += (
-                            obj_gain * (target_positive - pred).pow(2).sum()
-                        )
+                                obj_gain * ((target-pred).pow(2).sum())
+                            )
                     else:
                         batch_obj_detection_loss += (
-                            no_obj_gain * (target_negative - pred).pow(2).sum()
-                        )
-
+                                no_obj_gain * ((target-pred).pow(2).sum())
+                            )
+                    
         obj_detection_loss += batch_obj_detection_loss
 
     return (

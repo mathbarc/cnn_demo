@@ -41,8 +41,8 @@ def calculate_metrics(
             )
 
             result = {
-                "boxes": outputs[:, :4],
-                "scores": outputs[:, 4],
+                "boxes": torch.nn.functional.sigmoid(outputs[:, :4]),
+                "scores": torch.nn.functional.sigmoid(outputs[:, 4]),
                 "labels": torch.argmax(
                     torch.nn.functional.softmax(outputs[:, 5:]), 1
                 ).int(),
@@ -61,13 +61,15 @@ def calculate_metrics(
 def save_model(cnn: torch.nn.Module, name: str, type: str, device):
     mlflow.pytorch.log_model(cnn, f"{name}/{type}")
     input_sample = torch.ones((1, 3, 512, 512)).to(device)
+    model_file_name = f"{name}_{type}.onnx"
     torch.onnx.export(
         cnn,
         input_sample,
-        f"{name}_{type}.onnx",
+        model_file_name,
         input_names=["features"],
         output_names=["output"],
     )
+    mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
 
 
 def train_object_detector(
@@ -86,10 +88,11 @@ def train_object_detector(
 ):
     cnn = cnn.to(device)
 
-    optimizer = torch.optim.Adam(cnn.parameters(), lr)
-
-    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [100,1000,3000,5000],0.1)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-5)
+    optimizer = torch.optim.SGD(cnn.parameters(), lr)
+    
+    scheduler1 = torch.optim.lr_scheduler.MultiStepLR(optimizer, [100,1000,3000,5000,9000],0.1)
+    scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer,lr_lambda=[lambda epoch: 1+(epoch/5) if epoch <= 45 else 10 if epoch < 100 else 1 ])
+    scheduler = torch.optim.lr_scheduler.ChainedScheduler([scheduler1, scheduler2])
 
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
@@ -197,8 +200,8 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     warnings.filterwarnings("ignore", category=UserWarning)
 
-    n_objects_per_cell = 5
-    batch_size = 64
+    n_objects_per_cell = 3
+    batch_size = 16
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_yolo_v2_model(2, n_objects_per_cell)
 
@@ -228,5 +231,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-2, 1, n_objects_per_cell
+        cnn, dataloader, dataset_valid, 10000, 1e-5, 1, n_objects_per_cell
     )
