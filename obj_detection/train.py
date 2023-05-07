@@ -3,6 +3,7 @@ import warnings
 import torch
 import torch.utils.data
 import torch.utils.data.sampler
+import torchvision
 
 from typing import Tuple
 
@@ -41,10 +42,10 @@ def calculate_metrics(
             )
 
             result = {
-                "boxes": torch.nn.functional.sigmoid(outputs[:, :4]),
-                "scores": torch.nn.functional.sigmoid(outputs[:, 4]),
+                "boxes": outputs[:, :4],
+                "scores": outputs[:, 4],
                 "labels": torch.argmax(
-                    torch.nn.functional.softmax(outputs[:, 5:]), 1
+                    outputs[:, 5:], 1
                 ).int(),
             }
             results.append(result)
@@ -81,19 +82,17 @@ def train_object_detector(
     batchs_per_step=4,
     n_objects_per_cell=1,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    coordinates_loss_gain: float = 1.0,
-    classification_loss_gain: float = 1.0,
-    obj_loss_gain: float = 5,
-    no_obj_loss_gain: float = 1,
+    coordinates_loss_gain: float = 1.,
+    classification_loss_gain: float = 1.,
+    obj_loss_gain: float = 5.,
+    no_obj_loss_gain: float = .5,
 ):
     cnn = cnn.to(device)
 
-    optimizer = torch.optim.SGD(cnn.parameters(), lr)
+    optimizer = torch.optim.Adam(cnn.parameters(), lr)
     
-    scheduler1 = torch.optim.lr_scheduler.MultiStepLR(optimizer, [100,1000,3000,5000,9000],0.1)
-    scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer,lr_lambda=[lambda epoch: 1+(epoch/5) if epoch <= 45 else 10 if epoch < 100 else 1 ])
-    scheduler = torch.optim.lr_scheduler.ChainedScheduler([scheduler1, scheduler2])
-
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [50,1000,3000,5000,9000],0.1)
+    
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
     if experiment is None:
@@ -231,5 +230,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-5, 1, n_objects_per_cell
+        cnn, dataloader, dataset_valid, 10000, 1e-2, 1, n_objects_per_cell
     )

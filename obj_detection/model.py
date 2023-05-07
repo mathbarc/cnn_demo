@@ -160,20 +160,16 @@ def calc_obj_detection_loss(
             cellY = int((ann_box[0, 1] + ann_box[0, 3]) * 0.5 * grid_size[0])
 
             objs = detections[batch_id, cellY, cellX, :].view(n_objects_per_cell, -1)
-            boxes = torch.nn.functional.sigmoid(objs[:, 0:4])
-            classes = torch.nn.functional.softmax(objs[:, 5:])
+            boxes = objs[:, 0:4]
+            classes = objs[:, 5:]
 
             iou = torchvision.ops.box_iou(boxes, ann_box)
             best_iou_id = iou.argmax().item()
 
-            best_iou = iou[best_iou_id]
-            best_box = boxes[best_iou_id, :]
-            best_class = classes[best_iou_id, :]
+            batch_iou_loss += torch.nn.functional.mse_loss(boxes[best_iou_id].view(1,4), ann_box,reduction="sum")
+            batch_classification_loss += torch.nn.functional.mse_loss(classes[best_iou_id, :],ann_class,reduction="sum")
 
-            batch_iou_loss += (ann_box - best_box).pow(2).sum()
-            batch_classification_loss += (ann_class - best_class).pow(2).sum()
-
-            detections_associated_with_annotations[cellY, cellX, best_iou_id] = best_iou.item()
+            detections_associated_with_annotations[cellY, cellX, best_iou_id] = iou[best_iou_id].item()
 
         iou_loss += batch_iou_loss
         classification_loss += batch_classification_loss
@@ -184,15 +180,15 @@ def calc_obj_detection_loss(
                 end = (cellY * grid_size[1] + cellX + 1) * n_objects_per_cell
                 detection = all_objects[batch_id, start:end, :]
                 for object_id in range(n_objects_per_cell):
-                    pred = torch.nn.functional.sigmoid(detection[object_id, 4].view(1))
-                    target = detections_associated_with_annotations[cellY, cellX, object_id]
+                    pred = detection[object_id, 4].view(1)
+                    target = detections_associated_with_annotations[cellY, cellX, object_id].view((1))
                     if target:
                         batch_obj_detection_loss += (
-                                obj_gain * ((target-pred).pow(2).sum())
+                                obj_gain * torch.nn.functional.mse_loss(pred,target,reduction="none")
                             )
                     else:
                         batch_obj_detection_loss += (
-                                no_obj_gain * ((target-pred).pow(2).sum())
+                                no_obj_gain * torch.nn.functional.mse_loss(pred,target,reduction="none")
                             )
                     
         obj_detection_loss += batch_obj_detection_loss
