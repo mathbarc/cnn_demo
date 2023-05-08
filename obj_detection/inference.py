@@ -14,12 +14,12 @@ def softmax(data):
 
 labels = ["crop", "weed"]
 net = cv2.dnn.readNetFromONNX("object_detection_last.onnx")
-n_objects_per_cell = 3
+n_objects_per_cell = 5
 
 flops = net.getFLOPS((1, 3, 512, 512)) * 10e-9
 print(round(flops, 3), "BFLOPs")
 
-img = cv2.imread("obj_detection/dataset/./agri_data/data/agri_0_3.jpeg")
+img = cv2.imread("obj_detection/dataset/./agri_data/data/agri_0_9712.jpeg")
 input_img = cv2.dnn.blobFromImage(
     img, scalefactor=1.0 / 255.0, size=(512, 512), swapRB=True
 )
@@ -38,16 +38,17 @@ objs = output.reshape(
 
 boxes = [
     (
-        int(img.shape[1] * obj[0]),
-        int(img.shape[0] * obj[1]),
-        int(img.shape[1] * (obj[2] - obj[0])),
-        int(img.shape[0] * (obj[3] - obj[1])),
+        int(img.shape[1] * sigmoid(obj[0])),
+        int(img.shape[0] * sigmoid(obj[1])),
+        
+        int(img.shape[1] * (sigmoid(obj[2]) - sigmoid(obj[0]))),
+        int(img.shape[0] * (sigmoid(obj[3]) - sigmoid(obj[1]))),
     )
     for obj in objs
 ]
-classes = [obj[5:] for obj in objs]
-prob = [obj[4] for obj in objs]
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.5, 0.4)
+classes = [softmax(obj[5:]) for obj in objs]
+prob = [sigmoid(obj[4]) for obj in objs]
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.3, 0.4)
 end = time.time()
 print(end - start)
 
@@ -57,8 +58,10 @@ for box_id in indexes:
     
     label_id = classes[box_id].argmax()
     label = labels[label_id]
+    box_classes = classes[box_id]
+
     cv2.rectangle(img, boxes[box_id], (0, 255, 0), 3)
-    class_prob = str(round(softmax(classes[box_id])[label_id], 2))
+    class_prob = str(round(box_classes[label_id], 2))
     box_prob = str(round(prob[box_id], 2))
     cv2.putText(
         img,
@@ -70,7 +73,7 @@ for box_id in indexes:
         2,
     )
     print(boxes[box_id])
-    print(classes[box_id], "->", label)
+    print(box_classes, "->", label)
     print(prob[box_id])
 
 cv2.imshow("img", img)

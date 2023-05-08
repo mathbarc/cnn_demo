@@ -59,47 +59,55 @@ def create_yolo_v2_model(
     feature_extractor.add_module(
         "0_conv",
         torchvision.ops.Conv2dNormActivation(
-            3, 16, (3, 3), (1, 1), activation_layer=activation
+            3, 8, (3, 3), (1, 1), activation_layer=activation
         ),
     )
     feature_extractor.add_module("0_pool", torch.nn.MaxPool2d((2, 2), (2, 2)))
     feature_extractor.add_module(
         "1_conv",
         torchvision.ops.Conv2dNormActivation(
-            16, 32, (3, 3), (1, 1), activation_layer=activation
+            8, 16, (3, 3), (1, 1), activation_layer=activation
         ),
     )
     feature_extractor.add_module("1_pool", torch.nn.MaxPool2d((2, 2), (2, 2)))
     feature_extractor.add_module(
         "2_conv",
         torchvision.ops.Conv2dNormActivation(
-            32, 64, (3, 3), (1, 1), activation_layer=activation
+            16, 32, (3, 3), (1, 1), activation_layer=activation
         ),
     )
     feature_extractor.add_module("2_pool", torch.nn.MaxPool2d((2, 2), (2, 2)))
     feature_extractor.add_module(
         "3_conv",
         torchvision.ops.Conv2dNormActivation(
-            64, 128, (3, 3), (1, 1), activation_layer=activation
+            32, 64, (3, 3), (1, 1), activation_layer=activation
         ),
     )
     feature_extractor.add_module("3_pool", torch.nn.MaxPool2d((2, 2), (2, 2)))
     feature_extractor.add_module(
         "4_conv",
         torchvision.ops.Conv2dNormActivation(
-            128, 256, (3, 3), (1, 1), activation_layer=activation
+            64, 128, (3, 3), (1, 1), activation_layer=activation
         ),
     )
     feature_extractor.add_module("4_pool", torch.nn.MaxPool2d((2, 2), (2, 2)))
     feature_extractor.add_module(
         "5_conv",
         torchvision.ops.Conv2dNormActivation(
+            128, 256, (3, 3), (1, 1), activation_layer=activation
+        ),
+    )
+    feature_extractor.add_module("5_pool", torch.nn.MaxPool2d((2, 2), (2, 2)))
+    feature_extractor.add_module(
+        "6_conv",
+        torchvision.ops.Conv2dNormActivation(
             256, 512, (3, 3), (1, 1), activation_layer=activation
         ),
     )
-    feature_extractor.add_module("5_pool", torch.nn.MaxPool2d((2, 2), (1, 1)))
+
+    feature_extractor.add_module("6_pool", torch.nn.MaxPool2d((2, 2), (2, 2)))
     feature_extractor.add_module(
-        "6_conv",
+        "7_conv",
         torchvision.ops.Conv2dNormActivation(
             512, 1024, (3, 3), (1, 1), activation_layer=activation
         ),
@@ -160,14 +168,14 @@ def calc_obj_detection_loss(
             cellY = int((ann_box[0, 1] + ann_box[0, 3]) * 0.5 * grid_size[0])
 
             objs = detections[batch_id, cellY, cellX, :].view(n_objects_per_cell, -1)
-            boxes = objs[:, 0:4]
-            classes = objs[:, 5:]
+            boxes = torch.nn.functional.sigmoid(objs[:, 0:4])
+            classes = torch.nn.functional.softmax(objs[:, 5:])
 
             iou = torchvision.ops.box_iou(boxes, ann_box)
             best_iou_id = iou.argmax().item()
 
-            batch_iou_loss += torch.nn.functional.mse_loss(boxes[best_iou_id].view(1,4), ann_box,reduction="sum")
-            batch_classification_loss += torch.nn.functional.mse_loss(classes[best_iou_id, :],ann_class,reduction="sum")
+            batch_iou_loss += torchvision.ops.complete_box_iou_loss(boxes[best_iou_id].view(1,4), ann_box,reduction="sum")
+            batch_classification_loss += torch.nn.functional.multilabel_soft_margin_loss(classes[best_iou_id, :],ann_class,reduction="sum")
 
             detections_associated_with_annotations[cellY, cellX, best_iou_id] = iou[best_iou_id].item()
 
@@ -180,7 +188,7 @@ def calc_obj_detection_loss(
                 end = (cellY * grid_size[1] + cellX + 1) * n_objects_per_cell
                 detection = all_objects[batch_id, start:end, :]
                 for object_id in range(n_objects_per_cell):
-                    pred = detection[object_id, 4].view(1)
+                    pred = torch.nn.functional.sigmoid(detection[object_id, 4].view(1))
                     target = detections_associated_with_annotations[cellY, cellX, object_id].view((1))
                     if target:
                         batch_obj_detection_loss += (
@@ -213,3 +221,4 @@ if __name__ == "__main__":
         output_names=["output"],
     )
     print(obj_detect)
+

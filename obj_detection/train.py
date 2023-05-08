@@ -28,7 +28,7 @@ def calculate_metrics(
     results = []
     targets = []
 
-    metrics_calculator = torchmetrics.detection.MeanAveragePrecision(class_metrics=True)
+    metrics_calculator = torchmetrics.detection.MeanAveragePrecision(class_metrics=True).to(device=device)
 
     with torch.no_grad():
         for img, ann in dataset:
@@ -36,18 +36,26 @@ def calculate_metrics(
             outputs = cnn(img).permute(0, 2, 3, 1)
             output_shape = outputs.size()
 
-            outputs = outputs.cpu().reshape(
+            ann = ann.to(device=device)
+
+            outputs = outputs.reshape(
                 output_shape[1] * output_shape[2] * objects_per_cell,
                 int(output_shape[3] / objects_per_cell),
             )
 
             result = {
-                "boxes": outputs[:, :4],
-                "scores": outputs[:, 4],
+                "boxes": torch.nn.functional.sigmoid(outputs[:, :4]),
                 "labels": torch.argmax(
-                    outputs[:, 5:], 1
+                    torch.nn.functional.softmax(outputs[:, 5:]), 1
                 ).int(),
+                "scores": torch.nn.functional.sigmoid(outputs[:, 4]),
             }
+
+            best_boxes = torchvision.ops.nms(result["boxes"], result["scores"], 0.4)
+
+            result["boxes"] = torch.index_select(result["boxes"], 0, best_boxes)
+            result["labels"] = torch.index_select(result["labels"], 0, best_boxes)
+            result["scores"] = torch.index_select(result["scores"], 0, best_boxes)
             results.append(result)
 
             target = {"boxes": ann[:, :4], "labels": torch.argmax(ann[:, 4:], 1).int()}
@@ -84,14 +92,14 @@ def train_object_detector(
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     coordinates_loss_gain: float = 1.,
     classification_loss_gain: float = 1.,
-    obj_loss_gain: float = 5.,
-    no_obj_loss_gain: float = .5,
+    obj_loss_gain: float = 5,
+    no_obj_loss_gain: float = 1,
 ):
     cnn = cnn.to(device)
 
     optimizer = torch.optim.Adam(cnn.parameters(), lr)
     
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [50,1000,3000,5000,9000],0.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [500,1500,5000,9000],0.1)
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
@@ -199,7 +207,7 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     warnings.filterwarnings("ignore", category=UserWarning)
 
-    n_objects_per_cell = 3
+    n_objects_per_cell = 5
     batch_size = 16
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_yolo_v2_model(2, n_objects_per_cell)
@@ -230,5 +238,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-2, 1, n_objects_per_cell
+        cnn, dataloader, dataset_valid, 10000, 1e-3, 1, n_objects_per_cell
     )
