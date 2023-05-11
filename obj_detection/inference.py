@@ -12,6 +12,7 @@ def silu(data):
 def softmax(data):
     return numpy.exp(data) / numpy.sum(numpy.exp(data))
 
+
 labels = ["crop", "weed"]
 net = cv2.dnn.readNetFromONNX("object_detection_last.onnx")
 n_objects_per_cell = 5
@@ -19,7 +20,7 @@ n_objects_per_cell = 5
 flops = net.getFLOPS((1, 3, 512, 512)) * 10e-9
 print(round(flops, 3), "BFLOPs")
 
-img = cv2.imread("obj_detection/dataset/./agri_data/data/agri_0_9712.jpeg")
+img = cv2.imread("obj_detection/dataset/./agri_data/data/agri_0_3.jpeg")
 input_img = cv2.dnn.blobFromImage(
     img, scalefactor=1.0 / 255.0, size=(512, 512), swapRB=True
 )
@@ -40,15 +41,14 @@ boxes = [
     (
         int(img.shape[1] * sigmoid(obj[0])),
         int(img.shape[0] * sigmoid(obj[1])),
-        
-        int(img.shape[1] * (sigmoid(obj[2]) - sigmoid(obj[0]))),
-        int(img.shape[0] * (sigmoid(obj[3]) - sigmoid(obj[1]))),
+        int(img.shape[1] * sigmoid(obj[2])),
+        int(img.shape[0] * sigmoid(obj[3])),
     )
     for obj in objs
 ]
 classes = [softmax(obj[5:]) for obj in objs]
 prob = [sigmoid(obj[4]) for obj in objs]
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.3, 0.4)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.02, 0.4)
 end = time.time()
 print(end - start)
 

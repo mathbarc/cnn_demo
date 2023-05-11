@@ -44,9 +44,9 @@ def calculate_metrics(
             )
 
             result = {
-                "boxes": torch.nn.functional.sigmoid(outputs[:, :4]),
+                "boxes": torchvision.ops.box_convert(torch.nn.functional.sigmoid(outputs[:, :4]), "xywh", 'xyxy'),
                 "labels": torch.argmax(
-                    torch.nn.functional.softmax(outputs[:, 5:]), 1
+                    torch.nn.functional.softmax(outputs[:, 5:],1), 1
                 ).int(),
                 "scores": torch.nn.functional.sigmoid(outputs[:, 4]),
             }
@@ -69,7 +69,7 @@ def calculate_metrics(
 
 def save_model(cnn: torch.nn.Module, name: str, type: str, device):
     mlflow.pytorch.log_model(cnn, f"{name}/{type}")
-    input_sample = torch.ones((1, 3, 512, 512)).to(device)
+    input_sample = torch.ones((1, 3, 416, 416)).to(device)
     model_file_name = f"{name}_{type}.onnx"
     torch.onnx.export(
         cnn,
@@ -92,14 +92,14 @@ def train_object_detector(
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     coordinates_loss_gain: float = 1.,
     classification_loss_gain: float = 1.,
-    obj_loss_gain: float = 5,
-    no_obj_loss_gain: float = 1,
+    obj_loss_gain: float = 1,
+    no_obj_loss_gain: float = .5,
 ):
     cnn = cnn.to(device)
 
     optimizer = torch.optim.Adam(cnn.parameters(), lr)
     
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [500,1500,5000,9000],0.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [1000, 3500, 8000],0.1)
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
@@ -192,15 +192,7 @@ def train_object_detector(
             save_model(cnn, "object_detection", "last", device)
 
         if i_step % 1000 == 999:
-            mlflow.pytorch.log_model(cnn, f"{i_step+1}/object_detection")
-            input_sample = torch.ones((1, 3, 512, 512)).to(device)
-            torch.onnx.export(
-                cnn,
-                input_sample,
-                f"object_detection_{i_step+1}.onnx",
-                input_names=["features"],
-                output_names=["output"],
-            )
+            save_model(cnn, "object_detection", str(i_step+1), device)
 
 
 if __name__ == "__main__":
@@ -208,7 +200,7 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=UserWarning)
 
     n_objects_per_cell = 5
-    batch_size = 16
+    batch_size = 64
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_yolo_v2_model(2, n_objects_per_cell)
 
@@ -238,5 +230,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-3, 1, n_objects_per_cell
+        cnn, dataloader, dataset_valid, 10000, 1e-2, 1, n_objects_per_cell
     )
