@@ -38,17 +38,14 @@ def calculate_metrics(
 
             ann = ann.to(device=device)
 
-            outputs = outputs.reshape(
-                output_shape[1] * output_shape[2] * objects_per_cell,
-                int(output_shape[3] / objects_per_cell),
-            )
+            boxes, scores, labels = model.apply_activation_to_objects_from_output(outputs[0], n_objects_per_cell)
 
             result = {
-                "boxes": torchvision.ops.box_convert(torch.nn.functional.sigmoid(outputs[:, :4]), "xywh", 'xyxy'),
+                "boxes": torchvision.ops.box_convert(boxes.flatten(0,-2), "xywh", 'xyxy'),
                 "labels": torch.argmax(
-                    torch.nn.functional.softmax(outputs[:, 5:],1), 1
+                    labels.flatten(0,-2), 1
                 ).int(),
-                "scores": torch.nn.functional.sigmoid(outputs[:, 4]),
+                "scores": scores.flatten(0,-1),
             }
 
             best_boxes = torchvision.ops.nms(result["boxes"], result["scores"], 0.4)
@@ -200,7 +197,7 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=UserWarning)
 
     n_objects_per_cell = 5
-    batch_size = 64
+    batch_size = 16
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_yolo_v2_model(2, n_objects_per_cell)
 
@@ -230,5 +227,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-2, 1, n_objects_per_cell
+        cnn, dataloader, dataset_valid, 10000, 1e-3, 1, n_objects_per_cell
     )
