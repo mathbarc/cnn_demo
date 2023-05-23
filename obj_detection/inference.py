@@ -15,6 +15,7 @@ def softmax(data):
 
 labels = ["crop", "weed"]
 net = cv2.dnn.readNetFromONNX("object_detection_last.onnx")
+
 n_objects_per_cell = 5
 
 flops = net.getFLOPS((1, 3, 512, 512)) * 10e-9
@@ -27,28 +28,29 @@ input_img = cv2.dnn.blobFromImage(
 
 start = time.time()
 net.setInput(input_img, "features")
-output = net.forward("output").transpose((0, 2, 3, 1))
+output = net.forward("output")
 
+objs = output.reshape((100,7))
 
-objs = output.reshape((-1, output.shape[-1]))
-objs = output.reshape(
-    (int(objs.shape[0] * n_objects_per_cell), int(objs.shape[1] / n_objects_per_cell))
-)
+# objs = output.reshape((-1, output.shape[-1]))
+# objs = output.reshape(
+#     (int(objs.shape[0] * n_objects_per_cell), int(objs.shape[1] / n_objects_per_cell))
+# )
 
 # objs = 1/(1+numpy.exp(objs))
 
 boxes = [
     (
-        int(img.shape[1] * sigmoid(obj[0])),
-        int(img.shape[0] * sigmoid(obj[1])),
-        int(img.shape[1] * sigmoid(obj[2])),
-        int(img.shape[0] * sigmoid(obj[3])),
+        int(img.shape[1] * obj[0]),
+        int(img.shape[0] * obj[1]),
+        int(img.shape[1] * obj[2]),
+        int(img.shape[0] * obj[3]),
     )
     for obj in objs
 ]
-classes = [softmax(obj[5:]) for obj in objs]
-prob = [sigmoid(obj[4]) for obj in objs]
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.02, 0.4)
+classes = [obj[5:] for obj in objs]
+prob = [obj[4] for obj in objs]
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.4, 0.4)
 end = time.time()
 print(end - start)
 

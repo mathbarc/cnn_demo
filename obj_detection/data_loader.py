@@ -123,17 +123,27 @@ if __name__ == "__main__":
     import model
     import cv2
 
+    # dataset_path = "/data/ssd1/Dataset/Syngenta/research-python-dataset-registry/pest_count/dataset_modelo_v2"
+    dataset_path = "obj_detection/dataset"
+
     dataset = YoloDatasetLoader(
-        "obj_detection/dataset", model.get_transforms_for_obj_detector()
+        dataset_path, model.get_transforms_for_obj_detector()
     )
     indexes = dataset.get_train_indices()
 
-    img, anns = dataset[1]
+    img, anns = dataset[99]
 
     img = (img.permute(1, 2, 0).numpy() * 255).astype(numpy.uint8).copy()
 
+    print(img.shape)
+
     for ann in anns:
-        point = (ann[0:4].numpy() * 512).astype(int)
+        point = ann[0:4].numpy()
+        point[0] = point[0] * img.shape[1]
+        point[1] = point[1] * img.shape[0]
+        point[2] = point[2] * img.shape[1]
+        point[3] = point[3] * img.shape[0]
+        point = point.astype(int)
         cv2.rectangle(
             img,
             (point[0], point[1], point[2] - point[0], point[3] - point[1]),
