@@ -38,7 +38,7 @@ def calculate_metrics(
 
             ann = ann.to(device=device)
 
-            boxes, scores, labels = model.apply_activation_to_objects_from_output(outputs[0], n_objects_per_cell)
+            boxes, scores, labels = model.apply_activation_to_objects_from_output(outputs[0], objects_per_cell)
 
             result = {
                 "boxes": torchvision.ops.box_convert(boxes.flatten(0,-2), "xywh", 'xyxy'),
@@ -66,7 +66,7 @@ def calculate_metrics(
 
 def save_model(cnn: torch.nn.Module, name: str, type: str, device):
     mlflow.pytorch.log_model(cnn, f"{name}/{type}")
-    input_sample = torch.ones((1, 3, 416, 416)).to(device)
+    input_sample = torch.ones((1, 3, 512, 512)).to(device)
     model_file_name = f"{name}_{type}.onnx"
     torch.onnx.export(
         cnn,
@@ -84,19 +84,19 @@ def train_object_detector(
     validation_dataset: data_loader.YoloDatasetLoader,
     total_step: int,
     lr: float = 0.001,
-    batchs_per_step=4,
     n_objects_per_cell=1,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     coordinates_loss_gain: float = 1.,
     classification_loss_gain: float = 1.,
     obj_loss_gain: float = 1,
-    no_obj_loss_gain: float = .5,
+    no_obj_loss_gain: float = .05,
 ):
     cnn = cnn.to(device)
 
-    optimizer = torch.optim.Adam(cnn.parameters(), lr)
+    # optimizer = torch.optim.Adam(cnn.parameters(), lr)
+    optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
     
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [1000, 3500, 8000],0.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [2000, 6000, 8000],0.1)
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
@@ -109,7 +109,7 @@ def train_object_detector(
     training_params = {
         "opt": str(optimizer),
         "batch_size": dataloader.batch_sampler.batch_size,
-        "batches_per_step": batchs_per_step,
+        "batches_per_step": 1,
         "lr": lr,
         "n_steps": total_step,
         "coordinates_loss_gain": coordinates_loss_gain,
@@ -124,52 +124,43 @@ def train_object_detector(
 
     for i_step in tqdm(range(total_step)):
         optimizer.zero_grad()
-        acc_loss = 0
-        acc_iou_loss = 0
-        acc_class_loss = 0
-        acc_obj_detection = 0
-        for step_batch_i in range(batchs_per_step):
+        
+        indices = dataloader.dataset.get_train_indices()
+        while len(indices) < dataloader.batch_sampler.batch_size:
             indices = dataloader.dataset.get_train_indices()
-            while len(indices) < dataloader.batch_sampler.batch_size:
-                indices = dataloader.dataset.get_train_indices()
-            new_sampler = torch.utils.data.sampler.SubsetRandomSampler(indices=indices)
-            dataloader.batch_sampler.sampler = new_sampler
+        new_sampler = torch.utils.data.sampler.SubsetRandomSampler(indices=indices)
+        dataloader.batch_sampler.sampler = new_sampler
 
-            images, annotations = next(iter(dataloader))
+        images, annotations = next(iter(dataloader))
 
-            images = images.to(device)
-            annotations = annotations.to(device)
+        images = images.to(device)
+        annotations = annotations.to(device)
 
-            outputs = cnn(images)
+        outputs = cnn(images)
 
-            (
-                iou_loss,
-                obj_detection_loss,
-                classification_loss,
-            ) = model.calc_obj_detection_loss(
-                outputs,
-                annotations,
-                n_objects_per_cell,
-                coordinates_gain=coordinates_loss_gain,
-                classification_gain=classification_loss_gain,
-                obj_gain=obj_loss_gain,
-                no_obj_gain=no_obj_loss_gain,
-            )
+        (
+            iou_loss,
+            obj_detection_loss,
+            classification_loss,
+        ) = model.calc_obj_detection_loss(
+            outputs,
+            annotations,
+            n_objects_per_cell,
+            coordinates_gain=coordinates_loss_gain,
+            classification_gain=classification_loss_gain,
+            obj_gain=obj_loss_gain,
+            no_obj_gain=no_obj_loss_gain,
+        )
 
-            total_loss = iou_loss + obj_detection_loss + classification_loss
-            acc_loss += total_loss.item()
-            total_loss.backward()
-            optimizer.step()
-
-            acc_iou_loss += iou_loss.item()
-            acc_class_loss += classification_loss.item()
-            acc_obj_detection += obj_detection_loss.item()
+        total_loss = iou_loss + obj_detection_loss + classification_loss
+        total_loss.backward()
+        optimizer.step()
 
         metrics = {
-            "total_loss": acc_loss,
-            "iou_loss": acc_iou_loss,
-            "class_loss": acc_class_loss,
-            "object_presence_loss": acc_obj_detection,
+            "total_loss": total_loss.item(),
+            "iou_loss": iou_loss.item(),
+            "class_loss": classification_loss.item(),
+            "object_presence_loss": obj_detection_loss.item(),
             "lr": scheduler.get_last_lr()[0],
         }
         if i_step % 100 == 99:
@@ -197,7 +188,7 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=UserWarning)
 
     n_objects_per_cell = 5
-    batch_size = 16
+    batch_size = 64
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_yolo_v2_model(2, n_objects_per_cell)
 
@@ -227,5 +218,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-3, 1, n_objects_per_cell
+        cnn, dataloader, dataset_valid, 10000, 1e-4, n_objects_per_cell
     )

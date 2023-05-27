@@ -5,7 +5,7 @@ import torchvision.transforms.v2
 from typing import Tuple
 
 import concurrent.futures
-
+import random
 
 def create_output_layer(
     n_inputs, n_classes, objects_per_cell, activation=torch.nn.SiLU
@@ -18,7 +18,7 @@ def create_output_layer(
     output_layer.add_module(
         "prepare_features",
         torchvision.ops.Conv2dNormActivation(
-            n_inputs, 512, (1, 1), (1, 1), activation_layer=activation
+            n_inputs, 512, (3, 3), (1, 1), activation_layer=activation
         ),
     )
     output_layer.add_module(
@@ -99,7 +99,7 @@ def create_yolo_v2_model(
             256, 512, (3, 3), (1, 1), activation_layer=activation
         ),
     )
-    feature_extractor.add_module("5_pool", torch.nn.MaxPool2d((2, 2), (1, 1)))
+    feature_extractor.add_module("5_pool", torch.nn.MaxPool2d((2, 2), (2, 2)))
     feature_extractor.add_module(
         "6_conv",
         torchvision.ops.Conv2dNormActivation(
@@ -117,7 +117,7 @@ def create_yolo_v2_model(
 
 def get_transforms_for_obj_detector():
     return torchvision.transforms.Compose(
-        [torchvision.transforms.Resize(416), torchvision.transforms.ToTensor()]
+        [torchvision.transforms.Resize(512), torchvision.transforms.ToTensor()]
     )
 
 def apply_activation_to_objects_from_output(detections, n_objects_per_cell):
@@ -136,8 +136,8 @@ def apply_activation_to_objects_from_output(detections, n_objects_per_cell):
             
             bx = ((x + torch.nn.functional.sigmoid(objs[:,0]))*(1./detections.shape[1])).view(n_objects_per_cell,1)
             by = ((y + torch.nn.functional.sigmoid(objs[:,1]))*(1./detections.shape[0])).view(n_objects_per_cell,1)
-            bw = torch.nn.functional.sigmoid(objs[:,2]).view(n_objects_per_cell,1)
-            bh = torch.nn.functional.sigmoid(objs[:,3]).view(n_objects_per_cell,1)
+            bw = torch.nn.functional.sigmoid(objs[:,2]*(1./detections.shape[1])).view(n_objects_per_cell,1)
+            bh = torch.nn.functional.sigmoid(objs[:,3]*(1./detections.shape[0])).view(n_objects_per_cell,1)
 
             box = torch.cat((bx, by, bw, bh),1)
             if boxes is None:
@@ -183,34 +183,36 @@ def calc_batch_loss(detections, annotations, n_objects_per_cell, obj_gain, no_ob
         ann_box = annotations[ann_id, 0:4]
         ann_class = annotations[ann_id, 4:]
 
-        cellX = int((ann_box[0] + ann_box[2]) * 0.5 * grid_size[1])
-        cellY = int((ann_box[1] + ann_box[3]) * 0.5 * grid_size[0])
+        cellX = int((ann_box[0].item() + ann_box[2].item()) * 0.5 * grid_size[1])
+        cellY = int((ann_box[1].item() + ann_box[3].item()) * 0.5 * grid_size[0])
 
         boxes = torchvision.ops.box_convert(obj_boxes[cellY, cellX, :, :], "cxcywh", "xyxy")
         
         iou = torchvision.ops.box_iou(boxes, ann_box.view(1,-1))
         best_iou_id = iou.argmax().item()
+
+        while detections_associated_with_annotations[cellY, cellX, best_iou_id].item() == 1 and iou.sum()>0:
+            iou[best_iou_id] = 0
+            best_iou_id = iou.argmax().item()
+
+        if iou.sum() == 0:
+            best_iou_id = random.randint(0,boxes.shape[0]-1)
+
         
-        batch_iou_loss += torchvision.ops.distance_box_iou_loss(boxes[best_iou_id], ann_box)
+        batch_iou_loss += torchvision.ops.distance_box_iou_loss(boxes[best_iou_id], ann_box, reduction="sum")
 
-        batch_classification_loss += torch.nn.functional.cross_entropy(classes[cellY, cellX, best_iou_id, :],ann_class)
+        batch_classification_loss += torchvision.ops.sigmoid_focal_loss(classes[cellY, cellX, best_iou_id, :],ann_class, reduction="sum")
 
-        detections_associated_with_annotations[cellY, cellX, best_iou_id] = iou[best_iou_id].item()
+        batch_obj_detection_loss += obj_gain*torch.nn.functional.mse_loss( objectiviness[cellY, cellX, best_iou_id].view((1)), iou[best_iou_id])
 
+        detections_associated_with_annotations[cellY, cellX, best_iou_id] = 1
     
-    for cellX in range(grid_size[1]):
-        for cellY in range(grid_size[0]):
-            for object_id in range(n_objects_per_cell):
-                pred = objectiviness[cellX, cellY,object_id]
-                target = detections_associated_with_annotations[cellY, cellX, object_id]
-                if target:
-                    batch_obj_detection_loss += (
-                            obj_gain * torch.nn.functional.binary_cross_entropy(pred,target)
-                        )
-                else:
-                    batch_obj_detection_loss += (
-                            no_obj_gain * torch.nn.functional.binary_cross_entropy(pred,target)
-                        )
+    for x in range(grid_size[1]):
+        for y in range(grid_size[0]):
+            for box_id in range(n_objects_per_cell):
+                target = detections_associated_with_annotations[y,x,box_id].view(1)
+                if target.item() == 0:
+                    batch_obj_detection_loss += no_obj_gain*torch.nn.functional.mse_loss( objectiviness[cellY, cellX, box_id].view((1)), target)
                 
     return batch_iou_loss, batch_classification_loss, batch_obj_detection_loss
 
@@ -222,6 +224,7 @@ def calc_obj_detection_loss(
     classification_gain: float = 1.0,
     obj_gain: float = 5.0,
     no_obj_gain: float = .5,
+    parallel: bool = False
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     n_batches = detections.size()[0]
 
@@ -231,28 +234,36 @@ def calc_obj_detection_loss(
 
     detections = detections.permute((0, 2, 3, 1))
 
-    n_annotations = annotations.shape[1]
+    if parallel:
 
-    executor = concurrent.futures.ThreadPoolExecutor(8)
-    batch_processing = []
+        executor = concurrent.futures.ThreadPoolExecutor(8)
+        batch_processing = []
 
-    for batch_id in range(n_batches):
+        for batch_id in range(n_batches):
 
-        batch_process = executor.submit(calc_batch_loss, detections[batch_id], annotations[batch_id], n_objects_per_cell, obj_gain, no_obj_gain)
-        batch_processing.append(batch_process)
+            batch_process = executor.submit(calc_batch_loss, detections[batch_id], annotations[batch_id], n_objects_per_cell, obj_gain, no_obj_gain)
+            batch_processing.append(batch_process)
 
-    for batch_process in batch_processing:
-        
-        batch_iou_loss, batch_classification_loss, batch_obj_detection_loss = batch_process.result()
+        for batch_process in batch_processing:
+            
+            batch_iou_loss, batch_classification_loss, batch_obj_detection_loss = batch_process.result()
 
-        iou_loss += batch_iou_loss
-        classification_loss += batch_classification_loss
-        obj_detection_loss += batch_obj_detection_loss
+            iou_loss += batch_iou_loss
+            classification_loss += batch_classification_loss
+            obj_detection_loss += batch_obj_detection_loss
+    else:
+
+        for batch_id in range(n_batches):
+            batch_iou_loss, batch_classification_loss, batch_obj_detection_loss = calc_batch_loss(detections[batch_id], annotations[batch_id], n_objects_per_cell, obj_gain, no_obj_gain)
+            
+            iou_loss += batch_iou_loss
+            classification_loss += batch_classification_loss
+            obj_detection_loss += batch_obj_detection_loss
 
     return (
-        (coordinates_gain/n_annotations) * iou_loss,
-        obj_detection_loss/n_annotations,
-        (classification_gain/n_annotations) * classification_loss,
+        (coordinates_gain) * iou_loss,
+        obj_detection_loss,
+        (classification_gain) * classification_loss,
     )
 
 
@@ -260,7 +271,7 @@ if __name__ == "__main__":
     # obj_detect = create_cnn_obj_detector_with_efficientnet_backbone(2, 1, True)
     obj_detect = create_yolo_v2_model(2, 5)
 
-    input = torch.ones((1, 3, 416, 416))
+    input = torch.ones((1, 3, 512, 512))
     torch.onnx.export(
         obj_detect,
         input,
