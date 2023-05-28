@@ -41,7 +41,7 @@ def calculate_metrics(
             boxes, scores, labels = model.apply_activation_to_objects_from_output(outputs[0], objects_per_cell)
 
             result = {
-                "boxes": torchvision.ops.box_convert(boxes.flatten(0,-2), "xywh", 'xyxy'),
+                "boxes": torchvision.ops.box_convert(boxes.flatten(0,-2), "cxcywh", 'xyxy'),
                 "labels": torch.argmax(
                     labels.flatten(0,-2), 1
                 ).int(),
