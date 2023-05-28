@@ -8,6 +8,7 @@ import torchvision
 from typing import Tuple
 
 import torchmetrics.detection
+import torchvision.transforms.v2
 
 from tqdm import tqdm
 
@@ -33,19 +34,16 @@ def calculate_metrics(
     with torch.no_grad():
         for img, ann in dataset:
             img = torch.unsqueeze(img, 0).to(device)
-            outputs = cnn(img).permute(0, 2, 3, 1)
-            output_shape = outputs.size()
+            boxes, objectiviness, classes = cnn(img).permute(0, 2, 3, 1)
 
             ann = ann.to(device=device)
 
-            boxes, scores, labels = model.apply_activation_to_objects_from_output(outputs[0], objects_per_cell)
-
             result = {
-                "boxes": torchvision.ops.box_convert(boxes.flatten(0,-2), "xywh", 'xyxy'),
+                "boxes": torchvision.ops.box_convert(boxes.flatten(0,-2), "cxcywh", 'xyxy'),
                 "labels": torch.argmax(
-                    labels.flatten(0,-2), 1
+                    classes.flatten(0,-2), 1
                 ).int(),
-                "scores": scores.flatten(0,-1),
+                "scores": objectiviness.flatten(0,-1),
             }
 
             best_boxes = torchvision.ops.nms(result["boxes"], result["scores"], 0.4)
@@ -73,7 +71,7 @@ def save_model(cnn: torch.nn.Module, name: str, type: str, device):
         input_sample,
         model_file_name,
         input_names=["features"],
-        output_names=["output"],
+        output_names=["boxes", "objectiviness","classes"],
     )
     mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
 
@@ -96,7 +94,10 @@ def train_object_detector(
     # optimizer = torch.optim.Adam(cnn.parameters(), lr)
     optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
     
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [2000, 6000, 8000],0.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [500, 1000, 2000, 6000, 8000],0.1)
+
+
+    transform = torchvision.transforms.v2.RandomResize(380,512)
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
@@ -133,17 +134,19 @@ def train_object_detector(
 
         images, annotations = next(iter(dataloader))
 
-        images = images.to(device)
+        images = transform(images.to(device))
         annotations = annotations.to(device)
 
-        outputs = cnn(images)
+        boxes, objectiviness, classes = cnn(images)
 
         (
             iou_loss,
             obj_detection_loss,
             classification_loss,
         ) = model.calc_obj_detection_loss(
-            outputs,
+            boxes, 
+            objectiviness, 
+            classes,
             annotations,
             n_objects_per_cell,
             coordinates_gain=coordinates_loss_gain,
@@ -218,5 +221,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-4, n_objects_per_cell
+        cnn, dataloader, dataset_valid, 10000, 1e-2, n_objects_per_cell
     )
