@@ -272,9 +272,9 @@ def calc_batch_loss(boxes, objectiviness, classes, annotations, obj_gain, no_obj
         
         batch_iou_loss += torchvision.ops.distance_box_iou_loss(obj_boxes[best_iou_id], ann_box, reduction="sum")
 
-        batch_classification_loss += torchvision.ops.sigmoid_focal_loss(classes[cellY, cellX, best_iou_id, :],ann_class, reduction="sum")
+        batch_classification_loss += torch.nn.functional.cross_entropy(classes[cellY, cellX, best_iou_id, :],ann_class, reduction="sum")
 
-        batch_obj_detection_loss += obj_gain*torch.nn.functional.mse_loss( objectiviness[cellY, cellX, best_iou_id].view((1)), iou[best_iou_id])
+        batch_obj_detection_loss += obj_gain*torch.nn.functional.binary_cross_entropy( objectiviness[cellY, cellX, best_iou_id].view((1)), iou[best_iou_id])
 
         detections_associated_with_annotations[cellY, cellX, best_iou_id] = 1
     
