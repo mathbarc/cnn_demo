@@ -34,7 +34,7 @@ def calculate_metrics(
     with torch.no_grad():
         for img, ann in dataset:
             img = torch.unsqueeze(img, 0).to(device)
-            boxes, objectiviness, classes = cnn(img).permute(0, 2, 3, 1)
+            boxes, objectiviness, classes = cnn(img)
 
             ann = ann.to(device=device)
 
@@ -87,14 +87,14 @@ def train_object_detector(
     coordinates_loss_gain: float = 1.,
     classification_loss_gain: float = 1.,
     obj_loss_gain: float = 1,
-    no_obj_loss_gain: float = .05,
+    no_obj_loss_gain: float = 0,
 ):
     cnn = cnn.to(device)
 
-    # optimizer = torch.optim.Adam(cnn.parameters(), lr)
-    optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
+    optimizer = torch.optim.Adam(cnn.parameters(), lr)
+    # optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
     
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [500, 1000, 2000, 6000, 8000],0.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [100, 1000, 2000, 6000, 8000],0.1)
 
 
     transform = torchvision.transforms.v2.RandomResize(380,512)
@@ -167,6 +167,12 @@ def train_object_detector(
             "lr": scheduler.get_last_lr()[0],
         }
         if i_step % 100 == 99:
+
+            performance_metrics = calculate_metrics(
+                cnn, dataloader.dataset, n_objects_per_cell, device
+            )
+            metrics["train_map"] = performance_metrics
+
             performance_metrics = calculate_metrics(
                 cnn, validation_dataset, n_objects_per_cell, device
             )
