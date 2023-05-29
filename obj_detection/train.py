@@ -89,14 +89,14 @@ def train_object_detector(
     coordinates_loss_gain: float = 1.,
     classification_loss_gain: float = 1.,
     obj_loss_gain: float = 1,
-    no_obj_loss_gain: float = .05,
+    no_obj_loss_gain: float = .5,
 ):
     cnn = cnn.to(device)
 
     # optimizer = torch.optim.Adam(cnn.parameters(), lr)
     optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
     
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [2000, 6000, 8000],0.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [1000, 3000, 5000, 8000],0.1)
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
@@ -164,10 +164,20 @@ def train_object_detector(
             "lr": scheduler.get_last_lr()[0],
         }
         if i_step % 100 == 99:
+            print("Calculating map on training set")
+            performance_metrics = calculate_metrics(
+                cnn, dataloader.dataset, n_objects_per_cell, device
+            )
+            metrics["train_map"] = performance_metrics
+
+            print("Calculating map on validation set")
             performance_metrics = calculate_metrics(
                 cnn, validation_dataset, n_objects_per_cell, device
             )
             metrics["valid_map"] = performance_metrics
+
+            
+
             if best_map < performance_metrics:
                 best_map = performance_metrics
                 save_model(cnn, "object_detection", "best", device)
@@ -187,8 +197,8 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     warnings.filterwarnings("ignore", category=UserWarning)
 
-    n_objects_per_cell = 5
-    batch_size = 64
+    n_objects_per_cell = 3
+    batch_size = 16
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_yolo_v2_model(2, n_objects_per_cell)
 

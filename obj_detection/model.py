@@ -128,16 +128,17 @@ def apply_activation_to_objects_from_output(detections, n_objects_per_cell):
     objectiviness = None
     classes = None
     
-    for x in range(detections.shape[1]):
-        for y in range(detections.shape[0]):
+    for y in range(detections.shape[0]):
+        for x in range(detections.shape[1]):
+        
             
             objs = detections[y,x, :].view((n_objects_per_cell,-1))
             
             
             bx = ((x + torch.nn.functional.sigmoid(objs[:,0]))*(1./detections.shape[1])).view(n_objects_per_cell,1)
             by = ((y + torch.nn.functional.sigmoid(objs[:,1]))*(1./detections.shape[0])).view(n_objects_per_cell,1)
-            bw = torch.nn.functional.sigmoid(objs[:,2]*(1./detections.shape[1])).view(n_objects_per_cell,1)
-            bh = torch.nn.functional.sigmoid(objs[:,3]*(1./detections.shape[0])).view(n_objects_per_cell,1)
+            bw = torch.nn.functional.sigmoid(objs[:,2]).view(n_objects_per_cell,1)
+            bh = torch.nn.functional.sigmoid(objs[:,3]).view(n_objects_per_cell,1)
 
             box = torch.cat((bx, by, bw, bh),1)
             if boxes is None:
@@ -151,7 +152,7 @@ def apply_activation_to_objects_from_output(detections, n_objects_per_cell):
             else:
                 objectiviness = torch.cat((objectiviness, objness))
 
-            obj_classes = torch.nn.functional.softmax(objs[:,5:],dim=1)
+            obj_classes = torch.nn.functional.softmax(objs[:,5:])
             if classes is None:
                 classes = obj_classes
             else:
@@ -201,18 +202,18 @@ def calc_batch_loss(detections, annotations, n_objects_per_cell, obj_gain, no_ob
         
         batch_iou_loss += torchvision.ops.distance_box_iou_loss(boxes[best_iou_id], ann_box, reduction="sum")
 
-        batch_classification_loss += torchvision.ops.sigmoid_focal_loss(classes[cellY, cellX, best_iou_id, :],ann_class, reduction="sum")
+        batch_classification_loss += torch.nn.functional.cross_entropy(classes[cellY, cellX, best_iou_id, :],ann_class, reduction="sum")
 
-        batch_obj_detection_loss += obj_gain*torch.nn.functional.mse_loss( objectiviness[cellY, cellX, best_iou_id].view((1)), iou[best_iou_id])
+        batch_obj_detection_loss += obj_gain*torch.nn.functional.binary_cross_entropy( objectiviness[cellY, cellX, best_iou_id].view((1)), iou[best_iou_id])
 
         detections_associated_with_annotations[cellY, cellX, best_iou_id] = 1
     
-    for x in range(grid_size[1]):
-        for y in range(grid_size[0]):
-            for box_id in range(n_objects_per_cell):
-                target = detections_associated_with_annotations[y,x,box_id].view(1)
-                if target.item() == 0:
-                    batch_obj_detection_loss += no_obj_gain*torch.nn.functional.mse_loss( objectiviness[cellY, cellX, box_id].view((1)), target)
+    # for y in range(grid_size[0]):
+    #     for x in range(grid_size[1]):
+    #         for box_id in range(n_objects_per_cell):
+    #             target = detections_associated_with_annotations[y,x,box_id].view(1)
+    #             if target.item() == 0:
+    #                 batch_obj_detection_loss += no_obj_gain*torch.nn.functional.binary_cross_entropy( objectiviness[cellY, cellX, box_id].view((1)), target)
                 
     return batch_iou_loss, batch_classification_loss, batch_obj_detection_loss
 
