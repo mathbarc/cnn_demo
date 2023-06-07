@@ -28,6 +28,119 @@ def create_output_layer(
 
     return output_layer
 
+class RegionOutputLayer(torch.nn.Module):
+
+    def __init__(self, n_objects_per_cell, n_inputs, n_classes, activation=torch.nn.SiLU, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"), *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.n_objects_per_cell = n_objects_per_cell
+        self.n_inputs = n_inputs
+        self.n_classes = n_classes
+
+        self.layers = create_output_layer(n_inputs, n_classes, n_objects_per_cell, activation)
+        self.anchors = torch.Tensor([[47, 43],  [94,105], [210,207], [361,283], [442,425]]).to(device=device)*(1./512.)
+
+    def forward(self, input):
+
+        detections = self.layers(input).permute((0,2,3,1))
+
+        boxes = None
+        objectiviness = None
+        classes = None
+
+
+        for batch_i in range(detections.shape[0]):
+            batch_boxes = None
+            batch_objectiviness = None
+            batch_classes = None
+
+            for y in range(detections.shape[1]):
+                for x in range(detections.shape[2]):
+            
+                    objs = detections[batch_i,y,x, :].view((self.n_objects_per_cell,-1))
+                    
+                    bx = ((x + torch.nn.functional.sigmoid(objs[:,0]))/(detections.shape[2])).view(self.n_objects_per_cell,1)
+                    by = ((y + torch.nn.functional.sigmoid(objs[:,1]))/(detections.shape[1])).view(self.n_objects_per_cell,1)
+                    bw = (self.anchors[:,0]*torch.exp(objs[:,2])).view(self.n_objects_per_cell,1)
+                    bh = (self.anchors[:,1]*torch.exp(objs[:,3])).view(self.n_objects_per_cell,1)
+
+                    box = torch.cat((bx, by, bw, bh),1)
+                    if batch_boxes is None:
+                        batch_boxes = box
+                    else:
+                        batch_boxes = torch.cat((batch_boxes, box))
+
+                    objness = torch.nn.functional.sigmoid(objs[:,4])
+                    if batch_objectiviness is None:
+                        batch_objectiviness = objness
+                    else:
+                        batch_objectiviness = torch.cat((batch_objectiviness, objness))
+
+                    obj_classes = torch.nn.functional.softmax(objs[:,5:], dim=1)
+                    if batch_classes is None:
+                        batch_classes = obj_classes
+                    else:
+                        batch_classes = torch.cat((batch_classes, obj_classes))
+            
+            batch_boxes = batch_boxes.view((1,detections.shape[1],detections.shape[2], self.n_objects_per_cell, batch_boxes.shape[1]))
+            batch_objectiviness = batch_objectiviness.view((1,detections.shape[1],detections.shape[2], self.n_objects_per_cell))
+            batch_classes = batch_classes.view((1,detections.shape[1],detections.shape[2], self.n_objects_per_cell, batch_classes.shape[1]))
+
+            if boxes is None:
+                boxes = batch_boxes
+                objectiviness = batch_objectiviness
+                classes = batch_classes
+            else:
+                boxes = torch.cat((boxes, batch_boxes))
+                objectiviness = torch.cat((objectiviness, batch_objectiviness))
+                classes = torch.cat((classes, batch_classes))
+
+
+        return boxes, objectiviness, classes
+
+def apply_activation_to_objects_from_output(detections, n_objects_per_cell, anchors=torch.Tensor([[47, 43],  [94,105], [210,207], [361,283], [442,425]])):
+
+    anchors = anchors.to(detections.device)
+
+    objs = detections.view((detections.shape[0],detections.shape[1],n_objects_per_cell,-1))
+    boxes = None
+    objectiviness = None
+    classes = None
+    
+    for x in range(detections.shape[1]):
+        for y in range(detections.shape[0]):
+            
+            objs = detections[y,x, :].view((n_objects_per_cell,-1))
+
+            bx = ((x + torch.nn.functional.sigmoid(objs[:,0]))/(detections.shape[2])).view(n_objects_per_cell,1)
+            by = ((y + torch.nn.functional.sigmoid(objs[:,1]))/(detections.shape[1])).view(n_objects_per_cell,1)
+            bw = (anchors[:,0]*torch.exp(objs[:,2])/(512)).view(n_objects_per_cell,1)
+            bh = (anchors[:,1]*torch.exp(objs[:,3])/(512)).view(n_objects_per_cell,1)
+
+            box = torch.cat((bx, by, bw, bh),1)
+            if boxes is None:
+                boxes = box
+            else:
+                boxes = torch.cat((boxes, box))
+
+            objness = torch.nn.functional.sigmoid(objs[:,4])
+            if objectiviness is None:
+                objectiviness = objness
+            else:
+                objectiviness = torch.cat((objectiviness, objness))
+
+            obj_classes = torch.nn.functional.softmax(objs[:,5:])
+            if classes is None:
+                classes = obj_classes
+            else:
+                classes = torch.cat((classes, obj_classes))
+    
+    boxes = boxes.view((detections.shape[0],detections.shape[1], n_objects_per_cell, boxes.shape[1]))
+    objectiviness = objectiviness.view((detections.shape[0],detections.shape[1], n_objects_per_cell))
+    classes = classes.view((detections.shape[0],detections.shape[1], n_objects_per_cell, classes.shape[1]))
+
+    return boxes, objectiviness, classes
+
 
 def create_cnn_obj_detector_with_efficientnet_backbone(
     n_classes: int,
@@ -99,7 +212,7 @@ def create_yolo_v2_model(
             256, 512, (3, 3), (1, 1), activation_layer=activation
         ),
     )
-    feature_extractor.add_module("5_pool", torch.nn.MaxPool2d((2, 2), (2, 2)))
+    feature_extractor.add_module("5_pool", torch.nn.MaxPool2d((2, 2), (1, 1)))
     feature_extractor.add_module(
         "6_conv",
         torchvision.ops.Conv2dNormActivation(
@@ -107,7 +220,8 @@ def create_yolo_v2_model(
         ),
     )
 
-    output_layer = create_output_layer(1024, n_classes, objects_per_cell, activation)
+    # output_layer = RegionOutputLayer(objects_per_cell, 1024, n_classes, activation)
+    output_layer = create_output_layer(1024,n_classes, objects_per_cell, activation)
 
     cnn.add_module("features", feature_extractor)
     cnn.add_module("output", output_layer)
@@ -117,52 +231,11 @@ def create_yolo_v2_model(
 
 def get_transforms_for_obj_detector():
     return torchvision.transforms.Compose(
-        [torchvision.transforms.Resize(512), torchvision.transforms.ToTensor()]
+        [
+            torchvision.transforms.ToTensor()
+        ]
     )
 
-def apply_activation_to_objects_from_output(detections, n_objects_per_cell):
-
-
-    objs = detections.view((detections.shape[0],detections.shape[1],n_objects_per_cell,-1))
-    boxes = None
-    objectiviness = None
-    classes = None
-    
-    for y in range(detections.shape[0]):
-        for x in range(detections.shape[1]):
-        
-            
-            objs = detections[y,x, :].view((n_objects_per_cell,-1))
-            
-            
-            bx = ((x + torch.nn.functional.sigmoid(objs[:,0]))*(1./detections.shape[1])).view(n_objects_per_cell,1)
-            by = ((y + torch.nn.functional.sigmoid(objs[:,1]))*(1./detections.shape[0])).view(n_objects_per_cell,1)
-            bw = torch.nn.functional.sigmoid(objs[:,2]).view(n_objects_per_cell,1)
-            bh = torch.nn.functional.sigmoid(objs[:,3]).view(n_objects_per_cell,1)
-
-            box = torch.cat((bx, by, bw, bh),1)
-            if boxes is None:
-                boxes = box
-            else:
-                boxes = torch.cat((boxes, box))
-
-            objness = torch.nn.functional.sigmoid(objs[:,4])
-            if objectiviness is None:
-                objectiviness = objness
-            else:
-                objectiviness = torch.cat((objectiviness, objness))
-
-            obj_classes = torch.nn.functional.softmax(objs[:,5:])
-            if classes is None:
-                classes = obj_classes
-            else:
-                classes = torch.cat((classes, obj_classes))
-    
-    boxes = boxes.view((detections.shape[0],detections.shape[1], n_objects_per_cell, boxes.shape[1]))
-    objectiviness = objectiviness.view((detections.shape[0],detections.shape[1], n_objects_per_cell))
-    classes = classes.view((detections.shape[0],detections.shape[1], n_objects_per_cell, classes.shape[1]))
-
-    return boxes, objectiviness, classes
 
 
 
@@ -172,13 +245,14 @@ def calc_batch_loss(detections, annotations, n_objects_per_cell, obj_gain, no_ob
     batch_classification_loss = 0
     batch_obj_detection_loss = 0
 
-    obj_boxes, objectiviness, classes = apply_activation_to_objects_from_output(detections, n_objects_per_cell)
+    boxes, objectiviness, classes = apply_activation_to_objects_from_output(detections, n_objects_per_cell)
+
 
     detections_associated_with_annotations = torch.zeros(
-        (detections.shape[1], detections.shape[2], n_objects_per_cell),requires_grad=False
-    ).to(detections.device)
+        (objectiviness.shape),requires_grad=False
+    ).to(objectiviness.device)
 
-    grid_size = detections.shape[:2]
+    grid_size = boxes.shape[0:3]
 
     for ann_id in range(annotations.shape[0]):
         ann_box = annotations[ann_id, 0:4]
@@ -187,33 +261,35 @@ def calc_batch_loss(detections, annotations, n_objects_per_cell, obj_gain, no_ob
         cellX = int((ann_box[0].item() + ann_box[2].item()) * 0.5 * grid_size[1])
         cellY = int((ann_box[1].item() + ann_box[3].item()) * 0.5 * grid_size[0])
 
-        boxes = torchvision.ops.box_convert(obj_boxes[cellY, cellX, :, :], "cxcywh", "xyxy")
+        obj_boxes = torchvision.ops.box_convert(boxes[cellY, cellX, :, :], "cxcywh", "xyxy")
         
-        iou = torchvision.ops.box_iou(boxes, ann_box.view(1,-1))
+        iou = torchvision.ops.box_iou(obj_boxes, ann_box.view(1,-1))
         best_iou_id = iou.argmax().item()
 
         while detections_associated_with_annotations[cellY, cellX, best_iou_id].item() == 1 and iou.sum()>0:
             iou[best_iou_id] = 0
             best_iou_id = iou.argmax().item()
 
-        if iou.sum() == 0:
-            best_iou_id = random.randint(0,boxes.shape[0]-1)
+        if iou[best_iou_id] == 0:
+            best_iou_id = random.randint(0,obj_boxes.shape[0]-1)
 
         
-        batch_iou_loss += torchvision.ops.distance_box_iou_loss(boxes[best_iou_id], ann_box, reduction="sum")
+        batch_iou_loss += torchvision.ops.distance_box_iou_loss(obj_boxes[best_iou_id], ann_box)
 
-        batch_classification_loss += torch.nn.functional.cross_entropy(classes[cellY, cellX, best_iou_id, :],ann_class, reduction="sum")
+        batch_classification_loss += torch.nn.functional.cross_entropy(classes[cellY, cellX, best_iou_id, :],ann_class.argmax())
 
-        batch_obj_detection_loss += obj_gain*torch.nn.functional.binary_cross_entropy( objectiviness[cellY, cellX, best_iou_id].view((1)), iou[best_iou_id])
+        batch_obj_detection_loss += obj_gain*torch.nn.functional.mse_loss(objectiviness[cellY, cellX, best_iou_id].view((1)), iou[best_iou_id])
 
         detections_associated_with_annotations[cellY, cellX, best_iou_id] = 1
     
-    # for y in range(grid_size[0]):
-    #     for x in range(grid_size[1]):
-    #         for box_id in range(n_objects_per_cell):
-    #             target = detections_associated_with_annotations[y,x,box_id].view(1)
-    #             if target.item() == 0:
-    #                 batch_obj_detection_loss += no_obj_gain*torch.nn.functional.binary_cross_entropy( objectiviness[cellY, cellX, box_id].view((1)), target)
+    if no_obj_gain > 0:
+        
+        for y in range(grid_size[0]):
+            for x in range(grid_size[1]):    
+                for box_id in range(grid_size[2]):
+                    target = detections_associated_with_annotations[y,x,box_id].view(1)
+                    if target.item() == 0:
+                        batch_obj_detection_loss += no_obj_gain*torch.nn.functional.mse_loss(objectiviness[cellY, cellX, box_id].view((1)), target)
                 
     return batch_iou_loss, batch_classification_loss, batch_obj_detection_loss
 
@@ -233,7 +309,7 @@ def calc_obj_detection_loss(
     classification_loss = 0
     obj_detection_loss = 0
 
-    detections = detections.permute((0, 2, 3, 1))
+    detections = detections.permute(0,2,3,1)
 
     if parallel:
 
