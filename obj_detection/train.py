@@ -34,7 +34,9 @@ def calculate_metrics(
     with torch.no_grad():
         for img, ann in dataset:
             img = torch.unsqueeze(img, 0).to(device)
-            boxes, objectiviness, classes = cnn(img)
+            detections = cnn(img)
+            
+            boxes, objectiviness, classes = model.apply_activation_to_objects_from_output(detections, objects_per_cell)
 
             ann = ann.to(device=device)
 
@@ -71,7 +73,7 @@ def save_model(cnn: torch.nn.Module, name: str, type: str, device):
         input_sample,
         model_file_name,
         input_names=["features"],
-        output_names=["boxes", "objectiviness","classes"],
+        output_names=["output"],
     )
     mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
 
@@ -86,18 +88,19 @@ def train_object_detector(
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     coordinates_loss_gain: float = 1.,
     classification_loss_gain: float = 1.,
-    obj_loss_gain: float = 1,
-    no_obj_loss_gain: float = 0,
+    obj_loss_gain: float = 1.,
+    no_obj_loss_gain: float = 0.5,
+    batches_per_step:int = 1,
 ):
     cnn = cnn.to(device)
 
     optimizer = torch.optim.Adam(cnn.parameters(), lr)
     # optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
     
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [100, 1000, 2000, 6000, 8000],0.1)
+    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [2000, 4000, 8000],0.1)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-7)
 
-
-    transform = torchvision.transforms.v2.RandomResize(380,512)
+    transform = torchvision.transforms.Compose([torchvision.transforms.ColorJitter(0.1,0.1,0.1,0.05),torchvision.transforms.v2.RandomResize(380,642)])
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
@@ -110,7 +113,7 @@ def train_object_detector(
     training_params = {
         "opt": str(optimizer),
         "batch_size": dataloader.batch_sampler.batch_size,
-        "batches_per_step": 1,
+        "batches_per_step": batches_per_step,
         "lr": lr,
         "n_steps": total_step,
         "coordinates_loss_gain": coordinates_loss_gain,
@@ -123,47 +126,57 @@ def train_object_detector(
 
     cnn.train()
 
+
     for i_step in tqdm(range(total_step)):
         optimizer.zero_grad()
+
+        batch_iou_loss = 0 
+        batch_obj_detection_loss = 0 
+        batch_classification_loss = 0
+
+        for i_batch in range(batches_per_step):
         
-        indices = dataloader.dataset.get_train_indices()
-        while len(indices) < dataloader.batch_sampler.batch_size:
             indices = dataloader.dataset.get_train_indices()
-        new_sampler = torch.utils.data.sampler.SubsetRandomSampler(indices=indices)
-        dataloader.batch_sampler.sampler = new_sampler
+            while len(indices) < dataloader.batch_sampler.batch_size:
+                indices = dataloader.dataset.get_train_indices()
+            new_sampler = torch.utils.data.sampler.SubsetRandomSampler(indices=indices)
+            dataloader.batch_sampler.sampler = new_sampler
 
-        images, annotations = next(iter(dataloader))
+            images, annotations = next(iter(dataloader))
 
-        images = transform(images.to(device))
-        annotations = annotations.to(device)
+            images = transform(images.to(device))
+            annotations = annotations.to(device)
 
-        boxes, objectiviness, classes = cnn(images)
+            detections = cnn(images)
 
-        (
-            iou_loss,
-            obj_detection_loss,
-            classification_loss,
-        ) = model.calc_obj_detection_loss(
-            boxes, 
-            objectiviness, 
-            classes,
-            annotations,
-            n_objects_per_cell,
-            coordinates_gain=coordinates_loss_gain,
-            classification_gain=classification_loss_gain,
-            obj_gain=obj_loss_gain,
-            no_obj_gain=no_obj_loss_gain,
-        )
+            (
+                iou_loss,
+                obj_detection_loss,
+                classification_loss,
+            ) = model.calc_obj_detection_loss(
+                detections,
+                annotations,
+                n_objects_per_cell,
+                coordinates_gain=coordinates_loss_gain,
+                classification_gain=classification_loss_gain,
+                obj_gain=obj_loss_gain,
+                no_obj_gain=no_obj_loss_gain,
+            )
 
-        total_loss = iou_loss + obj_detection_loss + classification_loss
-        total_loss.backward()
+            total_loss = iou_loss + obj_detection_loss + classification_loss
+            total_loss.backward()
+
+            batch_iou_loss += iou_loss.item()
+            batch_obj_detection_loss += obj_detection_loss.item()
+            batch_classification_loss += classification_loss.item()
+
         optimizer.step()
 
         metrics = {
-            "total_loss": total_loss.item(),
-            "iou_loss": iou_loss.item(),
-            "class_loss": classification_loss.item(),
-            "object_presence_loss": obj_detection_loss.item(),
+            "total_loss": batch_iou_loss + batch_obj_detection_loss + batch_classification_loss,
+            "iou_loss": batch_iou_loss,
+            "class_loss": batch_classification_loss,
+            "object_presence_loss": batch_obj_detection_loss,
             "lr": scheduler.get_last_lr()[0],
         }
         if i_step % 100 == 99:
@@ -197,7 +210,7 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=UserWarning)
 
     n_objects_per_cell = 5
-    batch_size = 64
+    batch_size = 8
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_yolo_v2_model(2, n_objects_per_cell)
 
@@ -227,5 +240,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-2, n_objects_per_cell
+        cnn, dataloader, dataset_valid, 10000, 1e-3, n_objects_per_cell,batches_per_step=4
     )
