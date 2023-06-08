@@ -98,7 +98,7 @@ def train_object_detector(
     # optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
     
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [2000, 4000, 8000],0.1)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-7)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-8)
 
     transform = torchvision.transforms.Compose([torchvision.transforms.ColorJitter(0.1,0.1,0.1,0.05),torchvision.transforms.v2.RandomResize(380,642)])
     
@@ -133,6 +133,7 @@ def train_object_detector(
         batch_iou_loss = 0 
         batch_obj_detection_loss = 0 
         batch_classification_loss = 0
+        total_loss = 0
 
         for i_batch in range(batches_per_step):
         
@@ -163,13 +164,15 @@ def train_object_detector(
                 no_obj_gain=no_obj_loss_gain,
             )
 
-            total_loss = iou_loss + obj_detection_loss + classification_loss
-            total_loss.backward()
+            batch_total_loss = iou_loss + obj_detection_loss + classification_loss
+            #total_loss.backward()
+            total_loss += batch_total_loss
 
             batch_iou_loss += iou_loss.item()
             batch_obj_detection_loss += obj_detection_loss.item()
             batch_classification_loss += classification_loss.item()
 
+        total_loss.backward()
         optimizer.step()
 
         metrics = {
@@ -243,5 +246,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-3, n_objects_per_cell,batches_per_step=4
+        cnn, dataloader, dataset_valid, 10000, 1e-4, n_objects_per_cell,batches_per_step=4
     )
