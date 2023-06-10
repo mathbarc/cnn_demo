@@ -274,7 +274,7 @@ def calc_batch_loss(detections, annotations, n_objects_per_cell, obj_gain, no_ob
             best_iou_id = random.randint(0,obj_boxes.shape[0]-1)
 
         
-        batch_iou_loss += torchvision.ops.distance_box_iou_loss(obj_boxes[best_iou_id], ann_box)
+        batch_iou_loss += torch.nn.functional.smooth_l1_loss(obj_boxes[best_iou_id], ann_box)
 
         batch_classification_loss += torch.nn.functional.cross_entropy(classes[cellY, cellX, best_iou_id, :],ann_class.argmax())
 

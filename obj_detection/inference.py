@@ -18,7 +18,7 @@ def softmax(data):
 
 
 labels_str = ["crop", "weed"]
-anchors = numpy.array([[47, 43],  [94,105], [210,207], [361,283], [442,425]],dtype=float)*(1/512)
+anchors = numpy.array([[47, 43],  [94,105], [210,207], [361,283], [442,425]],dtype=float)
 net = cv2.dnn.readNetFromONNX("object_detection_last.onnx")
 
 n_objects_per_cell = 5
@@ -50,8 +50,8 @@ for y in range(output.shape[3]):
 
         box[:,0] = ((x + sigmoid(box[:,0]))/output.shape[4])*img.shape[1]
         box[:,1] = ((y + sigmoid(box[:,1]))/output.shape[3])*img.shape[0]
-        box[:,2] = (numpy.exp(box[:,2])*anchors[:,0])*img.shape[1]
-        box[:,3] = (numpy.exp(box[:,3])*anchors[:,1])*img.shape[0]
+        box[:,2] = (numpy.exp(box[:,2])*anchors[:,0])
+        box[:,3] = (numpy.exp(box[:,3])*anchors[:,1])
 
         box[:,0] = box[:,0] - (box[:,2]*0.5)
         box[:,1] = box[:,1] - (box[:,3]*0.5)
@@ -78,7 +78,7 @@ for y in range(output.shape[3]):
 # objs = 1/(1+numpy.exp(objs))
 
 
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.4, 0.4)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.8, 0.1)
 end = time.time()
 print(end - start)
 
