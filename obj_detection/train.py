@@ -246,5 +246,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-4, n_objects_per_cell,batches_per_step=4, no_obj_loss_gain=0.001
+        cnn, dataloader, dataset_valid, 10000, 1e-4, n_objects_per_cell,batches_per_step=1, no_obj_loss_gain=0.001
     )
