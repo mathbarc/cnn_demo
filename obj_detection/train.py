@@ -216,7 +216,7 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=UserWarning)
 
     n_objects_per_cell = 5
-    batch_size = 16
+    batch_size = 8
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_yolo_v2_model(2, n_objects_per_cell)
 
