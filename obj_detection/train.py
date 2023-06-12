@@ -216,7 +216,7 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=UserWarning)
 
     n_objects_per_cell = 5
-    batch_size = 8
+    batch_size = 16
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_yolo_v2_model(2, n_objects_per_cell)
 
@@ -246,5 +246,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-4, n_objects_per_cell,batches_per_step=1, no_obj_loss_gain=0.001
+        cnn, dataloader, dataset_valid, 10000, 1e-4, n_objects_per_cell,batches_per_step=4, no_obj_loss_gain=0.5
     )

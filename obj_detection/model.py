@@ -248,6 +248,8 @@ def calc_batch_loss(detections, annotations, n_objects_per_cell, obj_gain, no_ob
     boxes, objectiviness, classes = apply_activation_to_objects_from_output(detections, n_objects_per_cell)
 
 
+
+
     detections_associated_with_annotations = torch.zeros(
         (objectiviness.shape),requires_grad=False
     ).to(objectiviness.device)
@@ -266,19 +268,19 @@ def calc_batch_loss(detections, annotations, n_objects_per_cell, obj_gain, no_ob
         iou = torchvision.ops.box_iou(obj_boxes, ann_box.view(1,-1))
         best_iou_id = iou.argmax().item()
 
-        while detections_associated_with_annotations[cellY, cellX, best_iou_id].item() == 1 and iou.sum()>0:
-            iou[best_iou_id] = 0
-            best_iou_id = iou.argmax().item()
+        # while detections_associated_with_annotations[cellY, cellX, best_iou_id].item() == 1 and iou.sum()>0:
+        #     iou[best_iou_id] = 0
+        #     best_iou_id = iou.argmax().item()
 
-        if iou[best_iou_id] == 0:
-            best_iou_id = random.randint(0,obj_boxes.shape[0]-1)
+        # if iou[best_iou_id] == 0:
+        #     best_iou_id = random.randint(0,obj_boxes.shape[0]-1)
 
         
-        batch_iou_loss += torchvision.ops.complete_box_iou_loss(obj_boxes[best_iou_id], ann_box)
+        batch_iou_loss += torch.nn.functional.mse_loss(obj_boxes[best_iou_id], ann_box, reduction="sum")
 
-        batch_classification_loss += torch.nn.functional.cross_entropy(classes[cellY, cellX, best_iou_id, :],ann_class.argmax())
+        batch_classification_loss += torch.nn.functional.mse_loss(classes[cellY, cellX, best_iou_id, :],ann_class, reduction="sum")
 
-        batch_obj_detection_loss += obj_gain*torch.nn.functional.binary_cross_entropy(objectiviness[cellY, cellX, best_iou_id].view((1)), iou[best_iou_id])
+        batch_obj_detection_loss += obj_gain*torch.nn.functional.mse_loss(objectiviness[cellY, cellX, best_iou_id].view((1)), iou[best_iou_id], reduction="sum")
 
         detections_associated_with_annotations[cellY, cellX, best_iou_id] = 1
     
@@ -289,7 +291,7 @@ def calc_batch_loss(detections, annotations, n_objects_per_cell, obj_gain, no_ob
                 for box_id in range(grid_size[2]):
                     target = detections_associated_with_annotations[y,x,box_id].view(1)
                     if target.item() == 0:
-                        batch_obj_detection_loss += no_obj_gain*torch.nn.functional.binary_cross_entropy(objectiviness[cellY, cellX, box_id].view((1)), target)
+                        batch_obj_detection_loss += no_obj_gain*torch.nn.functional.mse_loss(objectiviness[cellY, cellX, box_id].view((1)), target, reduction="sum")
                 
     return batch_iou_loss, batch_classification_loss, batch_obj_detection_loss
 

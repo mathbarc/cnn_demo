@@ -78,7 +78,7 @@ for y in range(output.shape[3]):
 # objs = 1/(1+numpy.exp(objs))
 
 
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.8, 0.1)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.4, 0.1)
 end = time.time()
 print(end - start)
 
