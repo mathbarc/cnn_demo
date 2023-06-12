@@ -100,7 +100,7 @@ def train_object_detector(
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [2000, 4000, 8000],0.1)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-8)
 
-    transform = torchvision.transforms.Compose([torchvision.transforms.ColorJitter(0.1,0.1,0.1,0.05),torchvision.transforms.v2.RandomResize(380,642)])
+    transform = torchvision.transforms.Compose([torchvision.transforms.v2.RandomResize(380,642)])
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
