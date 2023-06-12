@@ -114,8 +114,8 @@ def apply_activation_to_objects_from_output(detections, n_objects_per_cell, anch
 
             bx = ((x + torch.nn.functional.sigmoid(objs[:,0]))/(detections.shape[2])).view(n_objects_per_cell,1)
             by = ((y + torch.nn.functional.sigmoid(objs[:,1]))/(detections.shape[1])).view(n_objects_per_cell,1)
-            bw = (anchors[:,0]*torch.exp(objs[:,2])/(512)).view(n_objects_per_cell,1)
-            bh = (anchors[:,1]*torch.exp(objs[:,3])/(512)).view(n_objects_per_cell,1)
+            bw = (anchors[:,0]*torch.exp(objs[:,2])/(detections.shape[2])).view(n_objects_per_cell,1)
+            bh = (anchors[:,1]*torch.exp(objs[:,3])/(detections.shape[1])).view(n_objects_per_cell,1)
 
             box = torch.cat((bx, by, bw, bh),1)
             if boxes is None:
