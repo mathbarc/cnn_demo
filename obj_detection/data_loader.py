@@ -1,6 +1,5 @@
 import torch
 import torchvision
-import PIL
 import os
 import numpy
 
@@ -19,9 +18,9 @@ class YoloDatasetLoader(torch.utils.data.Dataset):
     def __init__(
         self,
         dataset_path: str,
-        transform: torchvision.transforms.Compose,
         batch_size: int = 16,
         mode=DataloaderMode.TRAIN,
+        transform: torchvision.transforms.Compose = None
     ):
         if mode == DataloaderMode.TRAIN:
             dataset_file = "train.txt"
@@ -31,6 +30,7 @@ class YoloDatasetLoader(torch.utils.data.Dataset):
             dataset_file = "test.txt"
 
         self.batch_size = batch_size
+        self.pixel_value_scale = (1.0/255.)
 
         with open(os.path.join(dataset_path, "classes.txt"), 'r') as file:
             self.labels = file.readlines()
@@ -77,7 +77,11 @@ class YoloDatasetLoader(torch.utils.data.Dataset):
         image_path = os.path.join(self.dataset_path, image_name)
         annotation_path = os.path.splitext(image_path)[0] + ".txt"
 
-        img = self.transform(PIL.Image.open(image_path))
+        img = torchvision.io.read_image(image_path) * self.pixel_value_scale
+
+        if self.transform is not None:
+            img = self.transform(img)
+
         annotations = YoloDatasetLoader._get_annotations_from_file(
             annotation_path, len(self.labels)
         )
@@ -106,15 +110,15 @@ class YoloDatasetLoader(torch.utils.data.Dataset):
         for index, annotation_str in enumerate(annotation_strs):
             annotation_values = annotation_str.rstrip().split(" ")
             label = int(annotation_values[0])
-            x = float(annotation_values[1])
-            y = float(annotation_values[2])
-            deltaX = float(annotation_values[3]) / 2
-            deltaY = float(annotation_values[4]) / 2
+            cx = float(annotation_values[1])
+            cy = float(annotation_values[2])
+            w = float(annotation_values[3])
+            h = float(annotation_values[4])
 
-            annotations[index][0] = x - deltaX
-            annotations[index][1] = y - deltaY
-            annotations[index][2] = x + deltaX
-            annotations[index][3] = y + deltaY
+            annotations[index][0] = cx
+            annotations[index][1] = cy
+            annotations[index][2] = w
+            annotations[index][3] = h
             annotations[index][4 + label] = 1
         return annotations
 

@@ -1,21 +1,17 @@
-import math
-import warnings
+from tqdm import tqdm
+
 import torch
 import torch.utils.data
 import torch.utils.data.sampler
 import torchvision
 
-from typing import Tuple
-
 import torchmetrics.detection
 import torchvision.transforms.v2
 
-from tqdm import tqdm
+import mlflow
 
 import model
 import data_loader
-
-import mlflow
 
 
 def calculate_metrics(
@@ -29,23 +25,25 @@ def calculate_metrics(
     results = []
     targets = []
 
-    metrics_calculator = torchmetrics.detection.MeanAveragePrecision(class_metrics=True).to(device=device)
+    metrics_calculator = torchmetrics.detection.MeanAveragePrecision(box_format="cxcywh",class_metrics=True).to(device=device)
 
     with torch.no_grad():
         for img, ann in dataset:
             img = torch.unsqueeze(img, 0).to(device)
-            detections = cnn(img)
+            detections = cnn(img).squeeze()
             
-            boxes, objectiviness, classes = model.apply_activation_to_objects_from_output(detections, objects_per_cell)
+            boxes = detections[:,0:4]
+            objectiviness = detections[:,4]
+            classes = detections[:,5:]
 
             ann = ann.to(device=device)
 
             result = {
-                "boxes": torchvision.ops.box_convert(boxes.flatten(0,-2), "cxcywh", 'xyxy'),
+                "boxes": boxes,
                 "labels": torch.argmax(
-                    classes.flatten(0,-2), 1
+                    classes, 1
                 ).int(),
-                "scores": objectiviness.flatten(0,-1),
+                "scores": objectiviness,
             }
 
             best_boxes = torchvision.ops.nms(result["boxes"], result["scores"], 0.4)
@@ -102,7 +100,7 @@ def train_object_detector(
 
     transform = torchvision.transforms.Compose([torchvision.transforms.v2.RandomResize(380,642)])
     
-    mlflow.set_tracking_uri("http://mlflow.cluster.local")
+    # mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
     if experiment is None:
         experiment_id = mlflow.create_experiment("Object Detection")
@@ -130,7 +128,8 @@ def train_object_detector(
     for i_step in tqdm(range(total_step)):
         optimizer.zero_grad()
 
-        batch_iou_loss = 0 
+        batch_position_loss = 0
+        batch_scale_loss = 0
         batch_obj_detection_loss = 0 
         batch_classification_loss = 0
         total_loss = 0
@@ -151,9 +150,7 @@ def train_object_detector(
             detections = cnn(images)
 
             (
-                iou_loss,
-                obj_detection_loss,
-                classification_loss,
+                position_loss, scale_loss, classification_loss, obj_detection_loss
             ) = model.calc_obj_detection_loss(
                 detections,
                 annotations,
@@ -162,13 +159,14 @@ def train_object_detector(
                 classification_gain=classification_loss_gain,
                 obj_gain=obj_loss_gain,
                 no_obj_gain=no_obj_loss_gain,
+                parallel=True
             )
 
-            batch_total_loss = iou_loss + obj_detection_loss + classification_loss
-            #total_loss.backward()
+            batch_total_loss = position_loss + scale_loss + obj_detection_loss + classification_loss
             total_loss += batch_total_loss
 
-            batch_iou_loss += iou_loss.item()
+            batch_position_loss += position_loss.item()
+            batch_scale_loss += scale_loss.item()
             batch_obj_detection_loss += obj_detection_loss.item()
             batch_classification_loss += classification_loss.item()
 
@@ -176,8 +174,9 @@ def train_object_detector(
         optimizer.step()
 
         metrics = {
-            "total_loss": batch_iou_loss + batch_obj_detection_loss + batch_classification_loss,
-            "iou_loss": batch_iou_loss,
+            "total_loss": total_loss.item(),
+            "position_loss": batch_position_loss,
+            "scale_loss": batch_scale_loss,
             "class_loss": batch_classification_loss,
             "object_presence_loss": batch_obj_detection_loss,
             "lr": scheduler.get_last_lr()[0],
@@ -212,21 +211,18 @@ def train_object_detector(
 
 
 if __name__ == "__main__":
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    warnings.filterwarnings("ignore", category=UserWarning)
+    
 
     n_objects_per_cell = 5
     batch_size = 8
     # cnn = model.create_cnn_obj_detector_with_efficientnet_backbone(2, n_objects_per_cell, pretrained=True)
     cnn = model.create_yolo_v2_model(2, n_objects_per_cell)
 
-    transforms = model.get_transforms_for_obj_detector()
     dataset_train = data_loader.YoloDatasetLoader(
-        "obj_detection/dataset", transforms, batch_size
+        "obj_detection/dataset", batch_size
     )
     dataset_valid = data_loader.YoloDatasetLoader(
         "obj_detection/dataset",
-        transforms,
         batch_size,
         mode=data_loader.DataloaderMode.VALID,
     )
