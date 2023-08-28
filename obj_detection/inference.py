@@ -19,6 +19,10 @@ def softmax(data):
 
 labels_str = ["crop", "weed"]
 net = cv2.dnn.readNetFromONNX("obj_detect.onnx")
+# net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")
+
+# net.setPreferableTarget(cv2.dnn.DNN_TARGET_OPENCL)
+
 flops = net.getFLOPS((1, 3, 512, 512)) * 10e-9
 print(round(flops, 3), "BFLOPs")
 

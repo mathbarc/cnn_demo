@@ -29,28 +29,28 @@ class YoloOutput(torch.nn.Module):
 
         grid = self.conv(features)
 
-        grid_cell_position_x, grid_cell_position_y = torch.meshgrid(torch.arange(0,grid.shape[3]), torch.arange(0,grid.shape[2]))
+        grid_cell_position_x, grid_cell_position_y = torch.meshgrid([torch.arange(0,grid.shape[3]), torch.arange(0,grid.shape[2])], indexing='ij')
 
-        anchors_tiled = self.anchors.repeat((grid.shape[2], grid.shape[3],1,1)).reshape((self.anchors.shape[0],self.anchors.shape[1],grid.shape[2], grid.shape[3]))
         
         grid_dimensions = [torch.Tensor([grid.shape[0]]).int(),torch.Tensor([self.anchors.shape[0]]).int(), torch.Tensor([grid.shape[1]/self.anchors.shape[0]]).int(), torch.Tensor([grid.shape[2]]).int(), torch.Tensor([grid.shape[3]]).int()]
-        grid = grid.reshape(grid_dimensions)
+        grid = grid.view(grid_dimensions)
+
+        anchors_tiled = self.anchors.view((self.anchors.shape[0],self.anchors.shape[1], 1, 1))
         
-        grid[:,:,0] = (grid_cell_position_x + torch.tanh(grid[:,:,0]))/(grid.shape[-1])
-        grid[:,:,1] = (grid_cell_position_y + torch.tanh(grid[:,:,1]))/(grid.shape[-2])
+        x = ((grid_cell_position_x + torch.tanh(grid[:,:,0]))/grid.shape[-1]).view(grid_dimensions[0],grid_dimensions[1],1,grid_dimensions[3], grid_dimensions[4])
+        y = ((grid_cell_position_y + torch.tanh(grid[:,:,1]))/grid.shape[-2]).view(grid_dimensions[0],grid_dimensions[1],1,grid_dimensions[3], grid_dimensions[4])
+        w = ((anchors_tiled[:,0] * torch.exp(grid[:,:,2]))/grid.shape[-1]).view(grid_dimensions[0],grid_dimensions[1],1,grid_dimensions[3], grid_dimensions[4])
+        h = ((anchors_tiled[:,1] * torch.exp(grid[:,:,3]))/grid.shape[-2]).view(grid_dimensions[0],grid_dimensions[1],1,grid_dimensions[3], grid_dimensions[4])
         
-        grid[:,:,2] = (anchors_tiled[:,0] * torch.exp(grid[:,:,2]))/(grid.shape[-1])
-        grid[:,:,3] = (anchors_tiled[:,1] * torch.exp(grid[:,:,3]))/(grid.shape[-2])
-        
+        obj = torch.sigmoid(grid[:,:,4]).view(grid_dimensions[0],grid_dimensions[1],1,grid_dimensions[3], grid_dimensions[4])
 
-        grid[:,:,4] = torch.sigmoid(grid[:,:,4])
+        classes = torch.sigmoid(grid[:,:,5:])
 
-        grid[:,:,5:] = torch.sigmoid(grid[:,:,5:])
+        final_boxes = torch.cat((x,y,w,h,obj,classes), dim=2)
+        final_boxes = torch.permute(final_boxes, (0,1,3,4,2))
+        final_boxes = torch.reshape(final_boxes, (grid_dimensions[0],grid_dimensions[1]*grid_dimensions[3]*grid_dimensions[4], grid_dimensions[2]))
 
-        grid = torch.permute(grid, (0,1,3,4,2))
-        grid = torch.reshape(grid, (grid_dimensions[0],grid_dimensions[1]*grid_dimensions[3]*grid_dimensions[4], grid_dimensions[2]))
-
-        return grid
+        return final_boxes
 
 
 def create_yolo_v2_model(

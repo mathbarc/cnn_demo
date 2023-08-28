@@ -131,7 +131,7 @@ if __name__ == "__main__":
     dataset_path = "obj_detection/dataset"
 
     dataset = YoloDatasetLoader(
-        dataset_path, model.get_transforms_for_obj_detector()
+        dataset_path
     )
     indexes = dataset.get_train_indices()
 
