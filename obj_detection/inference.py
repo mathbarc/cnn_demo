@@ -58,7 +58,7 @@ for b in range(output.shape[1]):
 
 
 
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.8, 0.1)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.4, 0.4)
 end = time.time()
 print(end - start)
 
