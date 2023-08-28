@@ -18,6 +18,7 @@ def softmax(data):
 
 
 labels_str = ["crop", "weed"]
+# net = cv2.dnn.readNetFromONNX("obj_detect.onnx")
 net = cv2.dnn.readNetFromONNX("object_detection_best.onnx")
 # net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")
 
@@ -40,10 +41,20 @@ classes = []
 prob = []
 
 for b in range(output.shape[1]):
-    
-    boxes.append(output[0,b,:4].astype(int))
-    classes.append(output[0,b,5:])
-    prob.append(output[0,b,4])
+    box = output[0,b,:4]
+    box[0] = box[0] * img.shape[1]
+    box[1] = box[1] * img.shape[0]
+    box[2] = box[2] * img.shape[1]
+    box[3] = box[3] * img.shape[0]
+
+    box[0] = box[0] - (box[2]/2)
+    box[1] = box[1] - (box[3]/2)
+
+    boxes.append(box.astype(int))
+
+    cl = output[0,b,5:]
+    classes.append(cl)
+    prob.append(output[0,b,4]*cl.max())
 
 
 

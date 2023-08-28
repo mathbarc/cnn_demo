@@ -54,7 +54,7 @@ class YoloOutput(torch.nn.Module):
 
 
 def create_yolo_v2_model(
-    n_classes: int, objects_per_cell: int = 1, activation=torch.nn.LeakyReLU
+    n_classes: int, anchors:List[List[int]], activation=torch.nn.LeakyReLU
 ):
     cnn = torch.nn.Sequential()
 
@@ -116,7 +116,7 @@ def create_yolo_v2_model(
         ),
     )
 
-    output_layer = YoloOutput(512, n_classes,[[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
+    output_layer = YoloOutput(512, n_classes,anchors)
 
     cnn.add_module("features", feature_extractor)
     cnn.add_module("output", output_layer)
@@ -147,10 +147,10 @@ def calc_batch_loss(detections, annotations, obj_gain, no_obj_gain):
         if i in best_iou_ids:
             ann_id = best_iou_ids.index(i)
             
-            batch_position_loss += torch.nn.functional.mse_loss(obj_boxes[i,0:2],annotations[ann_id,0:2])
-            batch_scale_loss += torch.nn.functional.mse_loss(torch.sqrt(obj_boxes[i,2:4]),torch.sqrt(annotations[ann_id,2:4]))
+            batch_position_loss += torch.nn.functional.mse_loss(obj_boxes[i,0:2],annotations[ann_id,0:2],reduce="sum")
+            batch_scale_loss += torch.nn.functional.mse_loss(torch.sqrt(obj_boxes[i,2:4]),torch.sqrt(annotations[ann_id,2:4]),reduce="sum")
             batch_obj_detection_loss += obj_gain * torch.nn.functional.mse_loss(detections[i,4], iou[i,ann_id])
-            batch_classification_loss += torch.nn.functional.mse_loss(detections[i,5:], annotations[ann_id,4:])
+            batch_classification_loss += torch.nn.functional.mse_loss(detections[i,5:], annotations[ann_id,4:],reduce="sum")
         else:
             batch_obj_detection_loss += no_obj_gain * torch.nn.functional.mse_loss(detections[i,4], iou[i].max())
 
@@ -160,7 +160,6 @@ def calc_batch_loss(detections, annotations, obj_gain, no_obj_gain):
 def calc_obj_detection_loss(
     detections: torch.Tensor,
     annotations: torch.Tensor,
-    n_objects_per_cell: int,
     coordinates_gain: float = 1.0,
     classification_gain: float = 1.0,
     obj_gain: float = 5.0,
