@@ -22,7 +22,8 @@ labels_str = ["crop", "weed"]
 net = cv2.dnn.readNetFromONNX("object_detection_best.onnx")
 # net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")
 
-# net.setPreferableTarget(cv2.dnn.DNN_TARGET_OPENCL)
+# net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+# net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
 
 flops = net.getFLOPS((1, 3, 512, 512)) * 10e-9
 print(round(flops, 3), "BFLOPs")

@@ -98,7 +98,7 @@ def train_object_detector(
 
     transform = torchvision.transforms.Compose([torchvision.transforms.v2.RandomResize(380,642)])
     
-    # mlflow.set_tracking_uri("http://mlflow.cluster.local")
+    mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
     if experiment is None:
         experiment_id = mlflow.create_experiment("Object Detection")
@@ -155,7 +155,7 @@ def train_object_detector(
                 classification_gain=classification_loss_gain,
                 obj_gain=obj_loss_gain,
                 no_obj_gain=no_obj_loss_gain,
-                parallel=True
+                parallel=False
             )
 
             batch_total_loss = position_loss + scale_loss + obj_detection_loss + classification_loss
@@ -209,8 +209,8 @@ def train_object_detector(
 if __name__ == "__main__":
     
 
-    batch_size = 8
-    cnn = model.create_yolo_v2_model(2,[[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
+    batch_size = 16
+    cnn = model.create_yolo_v2_model(2,[[1.5686,1.5720], [4.1971,4.4082], [7.4817,7.1439], [11.1631,8.4289], [12.9989,12.5632]])
 
     dataset_train = data_loader.YoloDatasetLoader(
         "obj_detection/dataset", batch_size
@@ -236,5 +236,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-4, batches_per_step=4, no_obj_loss_gain=0.5
+        cnn, dataloader, dataset_valid, 10000, 1e-3, batches_per_step=2, no_obj_loss_gain=0.5
     )

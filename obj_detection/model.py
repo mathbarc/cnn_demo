@@ -28,21 +28,23 @@ class YoloOutput(torch.nn.Module):
         # Grid format -> B,C,H,W
 
         grid = self.conv(features)
-
-        grid_cell_position_x, grid_cell_position_y = torch.meshgrid([torch.arange(0,grid.shape[3]), torch.arange(0,grid.shape[2])], indexing='ij')
+        
+        grid_cell_position_y, grid_cell_position_x = torch.meshgrid([torch.arange(grid.size(2)), torch.arange(grid.size(3))], indexing='ij')
+        grid_cell_position_x = grid_cell_position_x.to(features.device)
+        grid_cell_position_y = grid_cell_position_y.to(features.device)
 
         
-        grid_dimensions = [torch.Tensor([grid.shape[0]]).int(),torch.Tensor([self.anchors.shape[0]]).int(), torch.Tensor([grid.shape[1]/self.anchors.shape[0]]).int(), torch.Tensor([grid.shape[2]]).int(), torch.Tensor([grid.shape[3]]).int()]
+        grid_dimensions = [grid.size(0),self.anchors.size(0), torch.divide(grid.size(1),self.anchors.size(0)).int(), grid.size(2), grid.size(3)]
         grid = grid.view(grid_dimensions)
 
-        anchors_tiled = self.anchors.view((self.anchors.shape[0],self.anchors.shape[1], 1, 1))
+        anchors_tiled = self.anchors.view((self.anchors.size(0),self.anchors.size(1), 1, 1)).to(grid.device)
         
-        x = ((grid_cell_position_x + torch.tanh(grid[:,:,0]))/grid.shape[-1]).view(grid_dimensions[0],grid_dimensions[1],1,grid_dimensions[3], grid_dimensions[4])
-        y = ((grid_cell_position_y + torch.tanh(grid[:,:,1]))/grid.shape[-2]).view(grid_dimensions[0],grid_dimensions[1],1,grid_dimensions[3], grid_dimensions[4])
-        w = ((anchors_tiled[:,0] * torch.exp(grid[:,:,2]))/grid.shape[-1]).view(grid_dimensions[0],grid_dimensions[1],1,grid_dimensions[3], grid_dimensions[4])
-        h = ((anchors_tiled[:,1] * torch.exp(grid[:,:,3]))/grid.shape[-2]).view(grid_dimensions[0],grid_dimensions[1],1,grid_dimensions[3], grid_dimensions[4])
+        x = ((grid_cell_position_x + torch.sigmoid(grid[:,:,0]))/grid.size(4)).unsqueeze(2)
+        y = ((grid_cell_position_y + torch.sigmoid(grid[:,:,1]))/grid.size(3)).unsqueeze(2)
+        w = ((anchors_tiled[:,0] * torch.exp(grid[:,:,2]))/grid.size(4)).unsqueeze(2)
+        h = ((anchors_tiled[:,1] * torch.exp(grid[:,:,3]))/grid.size(3)).unsqueeze(2)
         
-        obj = torch.sigmoid(grid[:,:,4]).view(grid_dimensions[0],grid_dimensions[1],1,grid_dimensions[3], grid_dimensions[4])
+        obj = torch.sigmoid(grid[:,:,4]).unsqueeze(2)
 
         classes = torch.sigmoid(grid[:,:,5:])
 
@@ -140,7 +142,10 @@ def calc_batch_loss(detections, annotations, obj_gain, no_obj_gain):
 
     obj_boxes = detections[:,0:4]
     obj_boxes_xyxy = torchvision.ops.box_convert(obj_boxes, "cxcywh", "xyxy")
-    iou = torchvision.ops.box_iou(obj_boxes_xyxy, annotations[:,0:4])
+
+    ann_xyxy = torchvision.ops.box_convert(annotations[:,0:4], "cxcywh", "xyxy")
+
+    iou = torchvision.ops.box_iou(obj_boxes_xyxy, ann_xyxy)
     best_iou_ids = iou.argmax(0).tolist()
 
     for i in range(detections.shape[0]):
@@ -213,7 +218,7 @@ def calc_obj_detection_loss(
 
 if __name__ == "__main__":
     # obj_detect = create_cnn_obj_detector_with_efficientnet_backbone(2, 1, True)
-    obj_detect = create_yolo_v2_model(2, 5)
+    obj_detect = create_yolo_v2_model(2, [[1.5686,1.5720], [4.1971,4.4082], [7.4817,7.1439], [11.1631,8.4289], [12.9989,12.5632]])
 
     input = torch.ones((1, 3, 512, 512))
     torch.onnx.export(
