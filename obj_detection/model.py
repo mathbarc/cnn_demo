@@ -148,6 +148,9 @@ def calc_batch_loss(detections, annotations, obj_gain, no_obj_gain):
     iou = torchvision.ops.box_iou(obj_boxes_xyxy, ann_xyxy)
     best_iou_ids = iou.argmax(0).tolist()
 
+    zero = torch.zeros([1], device=detections.device)
+    one = torch.ones([1], device=detections.device)
+
     for i in range(detections.shape[0]):
         if i in best_iou_ids:
             ann_id = best_iou_ids.index(i)
@@ -155,9 +158,10 @@ def calc_batch_loss(detections, annotations, obj_gain, no_obj_gain):
             batch_position_loss += torch.nn.functional.mse_loss(obj_boxes[i,0:2],annotations[ann_id,0:2],reduction="sum")
             batch_scale_loss += torch.nn.functional.mse_loss(torch.sqrt(obj_boxes[i,2:4]),torch.sqrt(annotations[ann_id,2:4]),reduction="sum")
             batch_obj_detection_loss += obj_gain * torch.nn.functional.mse_loss(detections[i,4], iou[i,ann_id])
+            # batch_obj_detection_loss += obj_gain * torch.nn.functional.mse_loss(detections[i,4].view([1]), one)
             batch_classification_loss += torch.nn.functional.mse_loss(detections[i,5:], annotations[ann_id,4:],reduction="sum")
         else:
-            batch_obj_detection_loss += no_obj_gain * torch.nn.functional.mse_loss(detections[i,4], iou[i].max())
+            batch_obj_detection_loss += no_obj_gain * torch.nn.functional.mse_loss(detections[i,4].view([1]), zero)
 
                 
     return batch_position_loss, batch_scale_loss, batch_classification_loss, batch_obj_detection_loss

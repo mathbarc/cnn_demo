@@ -90,8 +90,8 @@ def train_object_detector(
 ):
     cnn = cnn.to(device)
 
-    optimizer = torch.optim.Adam(cnn.parameters(), lr)
-    # optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
+    # optimizer = torch.optim.Adam(cnn.parameters(), lr)
+    optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
     
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [2000, 4000, 8000],0.1)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-8)
@@ -236,5 +236,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-3, batches_per_step=2, no_obj_loss_gain=0.5
+        cnn, dataloader, dataset_valid, 10000, 1e-4, batches_per_step=2, no_obj_loss_gain=0.5
     )
