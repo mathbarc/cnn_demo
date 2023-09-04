@@ -27,15 +27,13 @@ def calculate_metrics(
     metrics_calculator = torchmetrics.detection.MeanAveragePrecision(box_format="cxcywh",class_metrics=True).to(device=device)
 
     with torch.no_grad():
-        for img, ann in dataset:
+        for img, ann in tqdm(dataset):
             img = torch.unsqueeze(img, 0).to(device)
-            detections = cnn(img).squeeze()
+            detections = cnn(img).squeeze().to("cpu")
             
             boxes = detections[:,0:4]
             objectiviness = detections[:,4]
             classes = detections[:,5:]
-
-            ann = ann.to(device=device)
 
             result = {
                 "boxes": boxes,
@@ -45,11 +43,11 @@ def calculate_metrics(
                 "scores": objectiviness,
             }
 
-            best_boxes = torchvision.ops.nms(result["boxes"], result["scores"], 0.4)
+            # best_boxes = torchvision.ops.nms(result["boxes"], result["scores"], 0.4)
 
-            result["boxes"] = torch.index_select(result["boxes"], 0, best_boxes)
-            result["labels"] = torch.index_select(result["labels"], 0, best_boxes)
-            result["scores"] = torch.index_select(result["scores"], 0, best_boxes)
+            # result["boxes"] = torch.index_select(result["boxes"], 0, best_boxes)
+            # result["labels"] = torch.index_select(result["labels"], 0, best_boxes)
+            # result["scores"] = torch.index_select(result["scores"], 0, best_boxes)
             results.append(result)
 
             target = {"boxes": ann[:, :4], "labels": torch.argmax(ann[:, 4:], 1).int()}
@@ -90,8 +88,8 @@ def train_object_detector(
 ):
     cnn = cnn.to(device)
 
-    # optimizer = torch.optim.Adam(cnn.parameters(), lr)
-    optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
+    optimizer = torch.optim.Adam(cnn.parameters(), lr)
+    # optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
     
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [2000, 4000, 8000],0.1)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-8)
@@ -121,6 +119,7 @@ def train_object_detector(
 
     cnn.train()
 
+    n_elements = (batch_size*batches_per_step)
 
     for i_step in tqdm(range(total_step)):
         optimizer.zero_grad()
@@ -155,7 +154,7 @@ def train_object_detector(
                 classification_gain=classification_loss_gain,
                 obj_gain=obj_loss_gain,
                 no_obj_gain=no_obj_loss_gain,
-                parallel=False
+                parallel=True
             )
 
             batch_total_loss = position_loss + scale_loss + obj_detection_loss + classification_loss
@@ -177,7 +176,7 @@ def train_object_detector(
             "object_presence_loss": batch_obj_detection_loss,
             "lr": scheduler.get_last_lr()[0],
         }
-        if i_step % 100 == 99:
+        if i_step % 1000 == 999:
 
             performance_metrics = calculate_metrics(
                 cnn, dataloader.dataset, device
@@ -209,7 +208,7 @@ def train_object_detector(
 if __name__ == "__main__":
     
 
-    batch_size = 16
+    batch_size = 8
     cnn = model.create_yolo_v2_model(2,[[1.5686,1.5720], [4.1971,4.4082], [7.4817,7.1439], [11.1631,8.4289], [12.9989,12.5632]])
 
     dataset_train = data_loader.YoloDatasetLoader(
@@ -236,5 +235,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-4, batches_per_step=2, no_obj_loss_gain=0.5
+        cnn, dataloader, dataset_valid, 10000, 1e-4, batches_per_step=8, no_obj_loss_gain=0.5
     )

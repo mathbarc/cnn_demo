@@ -57,13 +57,9 @@ for b in range(output.shape[1]):
     classes.append(cl)
     prob.append(output[0,b,4]*cl.max())
 
-
-
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.1, 0.4)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.05, 0.4)
 end = time.time()
 print(end - start)
-
-
 
 for box_id in indexes:
     
