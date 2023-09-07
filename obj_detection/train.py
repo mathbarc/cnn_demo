@@ -89,12 +89,18 @@ def train_object_detector(
     cnn = cnn.to(device)
 
     optimizer = torch.optim.Adam(cnn.parameters(), lr)
-    # optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, 0.005)
+    # optimizer = torch.optim.SGD(cnn.parameters(), lr, 0.9, weight_decay=0.0005)
+    # optimizer = torch.optim.ASGD(cnn.parameters(), lr)
+    
     
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [2000, 4000, 8000],0.1)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-8)
 
-    transform = torchvision.transforms.Compose([torchvision.transforms.v2.RandomResize(380,642)])
+    transform = torchvision.transforms.Compose([
+                                                torchvision.transforms.v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2,hue=0.1),
+                                                torchvision.transforms.v2.RandomEqualize(0.2),
+                                                torchvision.transforms.v2.RandomResize(380,642)
+                                                ])
     
     mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
@@ -140,7 +146,8 @@ def train_object_detector(
 
             images, annotations = next(iter(dataloader))
 
-            images = transform(images.to(device))
+            # images = transform(images.to(device))
+            images = images.to(device)
             annotations = annotations.to(device)
 
             detections = cnn(images)
@@ -235,5 +242,5 @@ if __name__ == "__main__":
     )
 
     train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-4, batches_per_step=8, no_obj_loss_gain=0.5
+        cnn, dataloader, dataset_valid, 10000, 1e-3, batches_per_step=8, no_obj_loss_gain=0.5
     )

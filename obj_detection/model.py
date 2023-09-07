@@ -35,9 +35,9 @@ class YoloOutput(torch.nn.Module):
 
         
         grid_dimensions = [grid.size(0),self.anchors.size(0), (5+self.n_classes), grid.size(2), grid.size(3)]
-        grid = grid.view(grid_dimensions)
+        grid = grid.reshape(grid_dimensions)
 
-        anchors_tiled = self.anchors.view((self.anchors.size(0),self.anchors.size(1), 1, 1)).to(grid.device)
+        anchors_tiled = self.anchors.reshape((self.anchors.size(0),self.anchors.size(1), 1, 1)).to(grid.device)
         
         x = ((grid_cell_position_x + torch.sigmoid(grid[:,:,0]))/grid.size(4)).unsqueeze(2)
         y = ((grid_cell_position_y + torch.sigmoid(grid[:,:,1]))/grid.size(3)).unsqueeze(2)
@@ -243,7 +243,7 @@ if __name__ == "__main__":
 
     # obj_detect.eval()
 
-    dynamic_params = {"features":{0:"batch_size"}, "output":{0:"batch_size"}}
+    dynamic_params = {"features":{0:"batch_size", 2:"image_height", 3:"image_width"}, "output":{0:"batch_size",1:"n_boxes"}}
 
     input = torch.ones((1, 3, 512, 512))
     torch.onnx.export(
