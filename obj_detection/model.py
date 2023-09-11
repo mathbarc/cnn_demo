@@ -45,7 +45,7 @@ class YoloOutput(torch.nn.Module):
         h = ((anchors_tiled[:,1] * torch.exp(grid[:,:,3]))/grid.size(3)).unsqueeze(2)
         
         obj = torch.sigmoid(grid[:,:,4]).unsqueeze(2)
-        classes = torch.sigmoid(grid[:,:,5:])
+        classes = torch.softmax(grid[:,:,5:])
 
         # obj = grid[:,:,4].unsqueeze(2)
         # classes = grid[:,:,5:]
