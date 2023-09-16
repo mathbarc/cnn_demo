@@ -45,7 +45,7 @@ class YoloOutput(torch.nn.Module):
         h = ((anchors_tiled[:,1] * torch.exp(grid[:,:,3]))/grid.size(3)).unsqueeze(2)
         
         obj = torch.sigmoid(grid[:,:,4]).unsqueeze(2)
-        classes = torch.softmax(grid[:,:,5:])
+        classes = torch.softmax(grid[:,:,5:],dim=2)
 
         # obj = grid[:,:,4].unsqueeze(2)
         # classes = grid[:,:,5:]
@@ -244,15 +244,6 @@ if __name__ == "__main__":
     # obj_detect.eval()
 
     dynamic_params = {"features":{0:"batch_size", 2:"image_height", 3:"image_width"}, "output":{0:"batch_size",1:"n_boxes"}}
-
-    input = torch.ones((1, 3, 512, 512))
-    torch.onnx.export(
-        obj_detect,
-        input,
-        "obj_detect.onnx",
-        input_names=["features"],
-        output_names=["output"],
-        dynamic_axes=dynamic_params
-    )
+    torch.save(obj_detect,"object_detection.pt")
     print(obj_detect)
 

@@ -19,7 +19,8 @@ def softmax(data):
 
 labels_str = ["crop", "weed"]
 # net = cv2.dnn.readNetFromONNX("obj_detect.onnx")
-net = cv2.dnn.readNetFromONNX("object_detection_last.onnx")
+# net = cv2.dnn.readNetFromONNX("object_detection_last.onnx")
+net = cv2.dnn.readNetFromTorch("obj_detect.pt")
 # net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")
 
 # net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)

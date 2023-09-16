@@ -61,16 +61,16 @@ def calculate_metrics(
 
 def save_model(cnn: torch.nn.Module, name: str, type: str, device):
     mlflow.pytorch.log_model(cnn, f"{name}/{type}")
-    input_sample = torch.ones((1, 3, 512, 512)).to(device)
-    model_file_name = f"{name}_{type}.onnx"
-    torch.onnx.export(
-        cnn,
-        input_sample,
-        model_file_name,
-        input_names=["features"],
-        output_names=["output"],
-    )
-    mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
+    # input_sample = torch.ones((1, 3, 512, 512)).to(device)
+    # model_file_name = f"{name}_{type}.onnx"
+    # torch.onnx.export(
+    #     cnn,
+    #     input_sample,
+    #     model_file_name,
+    #     input_names=["features"],
+    #     output_names=["output"],
+    # )
+    # mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
 
 
 def train_object_detector(
