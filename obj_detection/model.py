@@ -1,7 +1,6 @@
 import torch
 import torch.onnx
 import torchvision
-import torchvision.transforms.v2
 from typing import Tuple, List
 
 import concurrent.futures
@@ -243,7 +242,16 @@ if __name__ == "__main__":
 
     # obj_detect.eval()
 
-    dynamic_params = {"features":{0:"batch_size", 2:"image_height", 3:"image_width"}, "output":{0:"batch_size",1:"n_boxes"}}
-    torch.save(obj_detect,"object_detection.pt")
+    # dynamic_params = {"features":{0:"batch_size", 2:"image_height", 3:"image_width"}, "output":{0:"batch_size",1:"n_boxes"}}
+    input_sample = torch.ones((1, 3, 512, 512))
+    model_file_name = f"obj_det.onnx"
+    torch.onnx.export(
+        obj_detect,
+        input_sample,
+        model_file_name,
+        input_names=["features"],
+        output_names=["output"],
+        # dynamic_axes=dynamic_params
+    )
     print(obj_detect)
 

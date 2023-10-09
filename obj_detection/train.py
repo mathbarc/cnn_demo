@@ -13,6 +13,8 @@ import mlflow
 import model
 import data_loader
 
+import cProfile
+
 
 def calculate_metrics(
     cnn: torch.nn.Module,
@@ -61,16 +63,16 @@ def calculate_metrics(
 
 def save_model(cnn: torch.nn.Module, name: str, type: str, device):
     mlflow.pytorch.log_model(cnn, f"{name}/{type}")
-    # input_sample = torch.ones((1, 3, 512, 512)).to(device)
-    # model_file_name = f"{name}_{type}.onnx"
-    # torch.onnx.export(
-    #     cnn,
-    #     input_sample,
-    #     model_file_name,
-    #     input_names=["features"],
-    #     output_names=["output"],
-    # )
-    # mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
+    input_sample = torch.ones((1, 3, 512, 512)).to(device)
+    model_file_name = f"{name}_{type}.onnx"
+    torch.onnx.export(
+        cnn,
+        input_sample,
+        model_file_name,
+        input_names=["features"],
+        output_names=["output"],
+    )
+    mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
 
 
 def train_object_detector(
@@ -97,8 +99,8 @@ def train_object_detector(
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step, 1e-8)
 
     transform = torchvision.transforms.Compose([
-                                                torchvision.transforms.v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2,hue=0.1),
-                                                torchvision.transforms.v2.RandomEqualize(0.2),
+                                                # torchvision.transforms.v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2,hue=0.1),
+                                                # torchvision.transforms.v2.RandomEqualize(0.2),
                                                 torchvision.transforms.v2.RandomResize(380,642)
                                                 ])
     
@@ -161,7 +163,7 @@ def train_object_detector(
                 classification_gain=classification_loss_gain,
                 obj_gain=obj_loss_gain,
                 no_obj_gain=no_obj_loss_gain,
-                parallel=True
+                parallel=False
             )
 
             batch_total_loss = position_loss + scale_loss + obj_detection_loss + classification_loss
@@ -241,6 +243,10 @@ if __name__ == "__main__":
         ),
     )
 
-    train_object_detector(
-        cnn, dataloader, dataset_valid, 10000, 1e-3, batches_per_step=8, no_obj_loss_gain=0.5
-    )
+    with cProfile.Profile() as profile:
+
+        train_object_detector(
+            cnn, dataloader, dataset_valid, 1, 1e-3, batches_per_step=8, no_obj_loss_gain=0.5, device=torch.device("cpu")
+        )
+
+        profile.dump_stats("train.prof")
