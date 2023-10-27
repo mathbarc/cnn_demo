@@ -1,164 +1,68 @@
-import torch
-import torchvision
 import os
+
 import numpy
+import cv2
 
-from enum import Enum
+from pycocotools.coco import COCO
+from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms.functional import resize
+from torchvision.io import read_image
 
-import logging
+class CocoDataset(Dataset):
+    def __init__(self, image_folder="/tmp/coco/", annotations_file=None, download_before=False):
+        
+        self._coco = COCO(annotations_file)
+        self.img_ids = list(self._coco.imgs.keys())
+        self.image_folder = image_folder
 
+        if not os.path.exists(self.image_folder):
+            os.makedirs(self.image_folder)
 
-class DataloaderMode(Enum):
-    TRAIN = 0
-    VALID = 1
-    TEST = 2
+        self.set_size((640,640),(19,19))
 
+        if download_before:
+            self._coco.download(self.image_folder, self.img_ids)
+    
+    def set_size(self, input_size, output_size):
+        self.input_size = input_size
+        self.output_size = output_size
+    
+    def select_images_with_n_anotations(self, n):
+        self.img_ids = [img for img in self._coco.imgs if len(self._coco.imgToAnns[img])==n]
 
-class YoloDatasetLoader(torch.utils.data.Dataset):
-    def __init__(
-        self,
-        dataset_path: str,
-        batch_size: int = 16,
-        mode=DataloaderMode.TRAIN,
-        transform: torchvision.transforms.Compose = None
-    ):
-        if mode == DataloaderMode.TRAIN:
-            dataset_file = "train.txt"
-        elif mode == DataloaderMode.VALID:
-            dataset_file = "valid.txt"
-        elif mode == DataloaderMode.TEST:
-            dataset_file = "test.txt"
-
-        self.batch_size = batch_size
-        self.pixel_value_scale = (1.0/255.)
-
-        with open(os.path.join(dataset_path, "classes.txt"), 'r') as file:
-            self.labels = file.readlines()
-            i = 0
-            while i < len(self.labels):
-                labels = self.labels[i].rstrip()
-                self.labels[i] = labels
-                i += 1
-
-        with open(os.path.join(dataset_path, dataset_file), 'r') as file:
-            file_list = file.readlines()
-
-        print(f"Checking images on dataset folder: {dataset_path}")
-
-        self.n_annotations = []
-
-        i = 0
-        while i < len(file_list):
-            file_list[i] = file_list[i].rstrip()
-            image_name = file_list[i]
-            image_path = os.path.join(dataset_path, image_name)
-            if not os.path.exists(image_path):
-                logging.error(f"{image_name} not found!")
-                del file_list[i]
-                i -= 1
-            annotation_path = os.path.splitext(image_path)[0] + ".txt"
-            if not os.path.exists(annotation_path):
-                logging.error(f"{image_name} does not have annotation!")
-                del file_list[i]
-                i -= 1
-            else:
-                with open(annotation_path, "r") as ann_file:
-                    lines = ann_file.readlines()
-                    self.n_annotations.append(len(lines))
-            i += 1
-
-        self.n_annotations = numpy.unique(self.n_annotations)
-        self.dataset_path = dataset_path
-        self.file_list = file_list
-        self.transform = transform
+    def get_categories_count(self):
+        return len(self._coco.cats)
 
     def __getitem__(self, index):
-        image_name = self.file_list[index]
-        image_path = os.path.join(self.dataset_path, image_name)
-        annotation_path = os.path.splitext(image_path)[0] + ".txt"
+        img_id = self.img_ids[index]
 
-        img = torchvision.io.read_image(image_path) * self.pixel_value_scale
+        coco_img = self._coco.imgs[img_id]
+        img_path = os.path.join(self.image_folder, coco_img["file_name"])
+        if not os.path.exists(img_path):
+            self._coco.download(self.image_folder, [img_id])
+        
+        img = read_image(img_path)
+        
+        list_coco_ann = self._coco.getAnnIds(img_id)
+        coco_ann = self._coco.loadAnns(list_coco_ann)
 
-        if self.transform is not None:
-            img = self.transform(img)
+        boxes = [((ann["bbox"][0] + (ann["bbox"][2]/2))/coco_img["width"], 
+                  (ann["bbox"][1] + (ann["bbox"][3]/2))/coco_img["height"], 
+                  (ann["bbox"][2]/coco_img["width"]), 
+                  (ann["bbox"][3]/coco_img["height"])) 
+                  for ann in coco_ann]
+        labels = [ann["category_id"] for ann in coco_ann]
 
-        annotations = YoloDatasetLoader._get_annotations_from_file(
-            annotation_path, len(self.labels)
-        )
+        img = resize(img,self.input_size)
 
-        return img, annotations
-
+        return img, {"boxes": boxes, "labels": labels}
+    
     def __len__(self):
-        return len(self.file_list)
+        return len(self.img_ids)
 
-    def get_train_indices(self):
-        sel_length = numpy.random.choice(self.n_annotations)
-        all_indices = numpy.where(
-            [
-                self.n_annotations[i] == sel_length
-                for i in numpy.arange(len(self.n_annotations))
-            ]
-        )[0]
-        indices = list(numpy.random.choice(all_indices, size=self.batch_size))
-        return indices
-
-    def _get_annotations_from_file(annotation_path: str, n_classes: int):
-        with open(annotation_path, "r") as annotation_file:
-            annotation_strs = annotation_file.readlines()
-
-        annotations = torch.zeros((len(annotation_strs), 4 + n_classes))
-        for index, annotation_str in enumerate(annotation_strs):
-            annotation_values = annotation_str.rstrip().split(" ")
-            label = int(annotation_values[0])
-            cx = float(annotation_values[1])
-            cy = float(annotation_values[2])
-            w = float(annotation_values[3])
-            h = float(annotation_values[4])
-
-            annotations[index][0] = cx
-            annotations[index][1] = cy
-            annotations[index][2] = w
-            annotations[index][3] = h
-            annotations[index][4 + label] = 1
-        return annotations
-
-
-if __name__ == "__main__":
-    import model
-    import cv2
-
-    # dataset_path = "/data/ssd1/Dataset/Syngenta/research-python-dataset-registry/pest_count/dataset_modelo_v2"
-    dataset_path = "obj_detection/dataset"
-
-    dataset = YoloDatasetLoader(
-        dataset_path
-    )
-    indexes = dataset.get_train_indices()
-
-    img, anns = dataset[99]
-
-    img = (img.permute(1, 2, 0).numpy() * 255).astype(numpy.uint8).copy()
-
-    print(img.shape)
-
-    for ann in anns:
-        point = ann[0:4].numpy()
-        point[0] = point[0] * img.shape[1]
-        point[1] = point[1] * img.shape[0]
-        point[2] = point[2] * img.shape[1]
-        point[3] = point[3] * img.shape[0]
-        point = point.astype(int)
-        cv2.rectangle(
-            img,
-            (point[0], point[1], point[2] - point[0], point[3] - point[1]),
-            (0, 255, 0),
-            3,
-        )
-
-    cv2.imshow("img", img)
-    cv2.waitKey()
-
-    print(dataset.labels)
+if __name__=="__main__":
+    dataset = CocoDataset("/data/hd1/Dataset/Coco/images","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
     print(len(dataset))
-    print(indexes[0:10])
-    print(dataset[indexes[0]])
+
+    img, ann = dataset[0]
+    
