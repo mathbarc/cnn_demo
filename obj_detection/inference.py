@@ -31,79 +31,83 @@ print(round(flops, 3), "BFLOPs")
 
 input_test = numpy.ones((1, 3, 416, 416))*0.5
 
-mean = 0
-for i in range(10):
+# mean = 0
+# for i in range(10):
     
-    start = time.time()
-    net.setInput(input_test, "features")
-    output = net.forward(["output"])
-    end = time.time()
-    v = (end - start)
-    mean += v
-    print(v)
-    time.sleep(1)
+#     start = time.time()
+#     net.setInput(input_test, "features")
+#     output = net.forward(["output"])
+#     end = time.time()
+#     v = (end - start)
+#     mean += v
+#     print(v)
+#     time.sleep(1)
 
-print()
-print(mean/10)
-...
+# print()
+# print(mean/10)
+# ...
 
-# img = cv2.imread("obj_detection/dataset/./agri_data/data/agri_0_3.jpeg")
-# input_img = cv2.dnn.blobFromImage(
-#     img, scalefactor=1.0 / 255.0, size=(512, 512), swapRB=True
-# )
+img = cv2.imread("/data/hd1/Dataset/Coco/images/000000391895.jpg")
+input_img = cv2.dnn.blobFromImage(
+    img, scalefactor=1.0 / 255.0, size=(416, 416), swapRB=True
+)
 
-# start = time.time()
-# net.setInput(input_img, "features")
-# output = net.forward("output")
+start = time.time()
+net.setInput(input_img, "features")
+output = net.forward("output")
 
-# boxes = []
-# classes = []
-# prob = []
+boxes = []
+classes = []
+prob = []
 
-# for b in range(output.shape[1]):
-#     box = output[0,b,:4]
-#     box[0] = box[0] * img.shape[1]
-#     box[1] = box[1] * img.shape[0]
-#     box[2] = box[2] * img.shape[1]
-#     box[3] = box[3] * img.shape[0]
+output = numpy.transpose(output, (0,1,3,4,2))
+output = numpy.reshape(output,(output.shape[0]*output.shape[1]*output.shape[2]*output.shape[3], output.shape[4]))
 
-#     box[0] = box[0] - (box[2]/2)
-#     box[1] = box[1] - (box[3]/2)
-
-#     boxes.append(box.astype(int))
-
-#     cl = output[0,b,5:]
-#     classes.append(cl)
-#     prob.append(output[0,b,4]*cl.max())
-
-# indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.2, 0.4)
-# end = time.time()
-
-
-# for box_id in indexes:
+for b in range(output.shape[1]):
     
-#     label_id = classes[box_id].argmax()
-#     label = labels_str[label_id]
-#     box_classes = classes[box_id]
+    box = output[b,:4]
+    box[0] = box[0] * img.shape[1]
+    box[1] = box[1] * img.shape[0]
+    box[2] = box[2] * img.shape[1]
+    box[3] = box[3] * img.shape[0]
 
-#     cv2.rectangle(img, boxes[box_id], (0, 255, 0), 3)
-#     class_prob = str(round(box_classes[label_id], 2))
-#     box_prob = str(round(prob[box_id], 2))
-#     cv2.putText(
-#         img,
-#         f"{label} - {class_prob}, {box_prob}",
-#         boxes[box_id][0:2],
-#         cv2.FONT_HERSHEY_PLAIN,
-#         2,
-#         (255, 0, 0),
-#         2,
-#     )
-#     print(boxes[box_id])
-#     print(box_classes, "->", label)
-#     print(prob[box_id])
+    box[0] = box[0] - (box[2]/2)
+    box[1] = box[1] - (box[3]/2)
 
-# cv2.imshow("img", img)
-# cv2.imwrite("pred.png", img)
+    boxes.append(box.astype(int))
 
-# print(end - start)
-# cv2.waitKey(0)
+    cl = output[b,5:]
+    classes.append(cl)
+    prob.append(output[b,4]*cl.max())
+
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.2, 0.4)
+end = time.time()
+
+
+for box_id in indexes:
+    
+    label_id = classes[box_id].argmax()
+    label = labels_str[label_id]
+    box_classes = classes[box_id]
+
+    cv2.rectangle(img, boxes[box_id], (0, 255, 0), 3)
+    class_prob = str(round(box_classes[label_id], 2))
+    box_prob = str(round(prob[box_id], 2))
+    cv2.putText(
+        img,
+        f"{label} - {class_prob}, {box_prob}",
+        boxes[box_id][0:2],
+        cv2.FONT_HERSHEY_PLAIN,
+        2,
+        (255, 0, 0),
+        2,
+    )
+    print(boxes[box_id])
+    print(box_classes, "->", label)
+    print(prob[box_id])
+
+cv2.imshow("img", img)
+cv2.imwrite("pred.png", img)
+
+print(end - start)
+cv2.waitKey(0)
