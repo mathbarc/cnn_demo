@@ -1,7 +1,6 @@
 import torch
 from typing import List
 import torchvision
-import numpy
 
 
 class YoloOutput(torch.nn.Module):
@@ -91,7 +90,6 @@ class YoloV2(torch.nn.Module):
         x = self.conv9(x)
         o1 = self.output(x)
 
-
         return o1
 
 
@@ -118,7 +116,7 @@ if __name__ == "__main__":
     device = torch.device("cuda")
     model = YoloV2(3, 2, [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]]).to(device)
 
-    input_sample = torch.ones((8,3, 416,416))*0.5
+    input_sample = torch.ones((1,3, 416,416))*0.5
     input_sample = input_sample.to(device)
 
     import time

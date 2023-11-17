@@ -31,21 +31,21 @@ print(round(flops, 3), "BFLOPs")
 
 input_test = numpy.ones((1, 3, 416, 416))*0.5
 
-# mean = 0
-# for i in range(10):
+mean = 0
+for i in range(10):
     
-#     start = time.time()
-#     net.setInput(input_test, "features")
-#     output = net.forward(["output"])
-#     end = time.time()
-#     v = (end - start)
-#     mean += v
-#     print(v)
-#     time.sleep(1)
+    start = time.time()
+    net.setInput(input_test, "features")
+    output = net.forward(["output"])
+    end = time.time()
+    v = (end - start)
+    mean += v
+    print(v)
+    time.sleep(1)
 
-# print()
-# print(mean/10)
-# ...
+print()
+print(mean/10)
+...
 
 img = cv2.imread("/data/hd1/Dataset/Coco/images/000000391895.jpg")
 input_img = cv2.dnn.blobFromImage(
