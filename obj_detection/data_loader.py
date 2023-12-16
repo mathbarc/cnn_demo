@@ -44,14 +44,15 @@ class CocoDataset(Dataset):
         list_coco_ann = self._coco.getAnnIds(img_id)
         coco_ann = self._coco.loadAnns(list_coco_ann)
 
-        boxes = [((ann["bbox"][0] + (ann["bbox"][2]/2))/coco_img["width"], 
+        boxes = [[(ann["bbox"][0] + (ann["bbox"][2]/2))/coco_img["width"], 
                   (ann["bbox"][1] + (ann["bbox"][3]/2))/coco_img["height"], 
                   (ann["bbox"][2]/coco_img["width"]), 
-                  (ann["bbox"][3]/coco_img["height"])) 
+                  (ann["bbox"][3]/coco_img["height"])] 
                   for ann in coco_ann]
+        boxesTensor = torch.FloatTensor(boxes)
         labels = [ann["category_id"] for ann in coco_ann]
 
-        return img, {"boxes": boxes, "labels": labels}
+        return img, {"boxes": boxesTensor, "labels": labels}
     
     def __len__(self):
         return len(self.img_ids)
