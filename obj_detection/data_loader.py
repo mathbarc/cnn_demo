@@ -17,6 +17,17 @@ class CocoDataset(Dataset):
         self._coco = COCO(annotations_file)
         self.img_ids = list(self._coco.imgs.keys())
         self.image_folder = image_folder
+        self._id_label_list = list(self._coco.cats)
+        
+        self._label_dict = {}
+        
+        label_count = 0
+        for id in self._coco.cats:
+            cat = self._coco.cats[id]
+            self._label_dict[id] = {"label":cat["name"], "id":label_count}
+            label_count+=1
+        
+        
 
         if not os.path.exists(self.image_folder):
             os.makedirs(self.image_folder)
@@ -29,7 +40,7 @@ class CocoDataset(Dataset):
         self.img_ids = [img for img in self._coco.imgs if len(self._coco.imgToAnns[img])==n]
 
     def get_categories_count(self):
-        return len(self._coco.cats)
+        return len(self._label_dict)
 
     def __getitem__(self, index):
         img_id = self.img_ids[index]
@@ -50,7 +61,7 @@ class CocoDataset(Dataset):
                   (ann["bbox"][3]/coco_img["height"])] 
                   for ann in coco_ann]
         boxesTensor = torch.FloatTensor(boxes)
-        labels = [ann["category_id"] for ann in coco_ann]
+        labels = [self._label_dict[ann["category_id"]]["id"] for ann in coco_ann]
 
         return img, {"boxes": boxesTensor, "labels": labels}
     
@@ -126,20 +137,16 @@ class ObjDetectionDataLoader:
 
         return inputData, annotations
 
-        
+    def __len__(self):
+        return len(self.objDetectionDataset)/self.batch_size
 
 if __name__=="__main__":
-    dataset = CocoDataset("/data/hd1/Dataset/Coco/images","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
+    dataset = CocoDataset("/data/hd1/Dataset/Coco/train2017","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
     dataloader = ObjDetectionDataLoader(dataset, 8, 368, 512)
+    
+    print(dataset.get_categories_count())
+    
+    it = iter(dataloader)
+    img, ann = next(it)
 
-    i = 0
-
-    start = time.time()
-    for imgs, ann in dataloader:
-        if i == 10:
-            break
-        i+=1
-    end = time.time()
-
-    print(end-start)
-        
+    ...    

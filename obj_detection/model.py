@@ -43,6 +43,9 @@ class YoloOutput(torch.nn.Module):
         classes = torch.softmax(grid[:,:,5:],dim=2)
 
         final_boxes = torch.cat((x,y,w,h,obj,classes), dim=2)
+        
+        if torch.isnan(final_boxes).any():
+            ...
 
         return final_boxes
     
@@ -150,24 +153,26 @@ def calc_batch_loss(detections:torch.Tensor, annotations, obj_gain, no_obj_gain)
             contains_obj[cellY, cellX, best_iou_id, 1] = iou[best_iou_id]
 
         zero = torch.zeros([1], device=detections.device)
+        one = torch.ones([1], device=detections.device)
 
         for i in range(detections.shape[0]):
             for j in range(detections.shape[1]):
                 for k in range(detections.shape[2]):
                     item = contains_obj[i,j,k]
-                    ann_id = item[0].int().cpu().item()
+                    ann_id = int(item[0].cpu().item())
                     best_iou = item[1]
 
                     if ann_id >= 0:
                         batch_position_loss += torch.nn.functional.mse_loss(obj_boxes[i,j,k,0:2],ann_boxes[ann_id,0:2],reduction="sum")
-                        batch_scale_loss += torch.nn.functional.mse_loss(torch.sqrt(obj_boxes[i,j,k,2:4]),torch.sqrt(ann_boxes[ann_id,2:4]),reduction="sum")
-                        batch_obj_detection_loss += obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4], best_iou)
+                        batch_position_loss += torch.nn.functional.mse_loss(torch.sqrt(obj_boxes[i,j,k,2:4]),torch.sqrt(ann_boxes[ann_id,2:4]),reduction="sum")
+                        batch_obj_detection_loss += obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4], one)
                         batch_classification_loss += torch.nn.functional.cross_entropy(detections[i,j,k,5:], ann_classes[ann_id])
                     else:
                         batch_obj_detection_loss += no_obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4].view([1]), zero)
 
-                    
-    return batch_position_loss, batch_scale_loss, batch_classification_loss, batch_obj_detection_loss
+    if torch.isnan(batch_position_loss) or torch.isnan(batch_classification_loss) or torch.isnan(batch_obj_detection_loss):
+        ...
+    return batch_position_loss, batch_classification_loss, batch_obj_detection_loss
 
 
 def calc_obj_detection_loss(
@@ -178,13 +183,14 @@ def calc_obj_detection_loss(
     obj_gain: float = 5.0,
     no_obj_gain: float = .5,
     parallel: bool = False
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     n_batches = detections.size()[0]
 
     position_loss = 0
     scale_loss = 0
     classification_loss = 0
     obj_detection_loss = 0
+    
 
     
 
@@ -200,25 +206,24 @@ def calc_obj_detection_loss(
 
         for batch_process in batch_processing:
             
-            batch_position_loss, batch_scale_loss, batch_classification_loss, batch_obj_detection_loss = batch_process.result()
+            batch_position_loss, batch_classification_loss, batch_obj_detection_loss = batch_process.result()
 
             position_loss += batch_position_loss
-            scale_loss += batch_scale_loss
             classification_loss += batch_classification_loss
             obj_detection_loss += batch_obj_detection_loss
     else:
 
         for batch_id in range(n_batches):
-            batch_position_loss, batch_scale_loss, batch_classification_loss, batch_obj_detection_loss = calc_batch_loss(detections[batch_id], annotations[batch_id], obj_gain, no_obj_gain)
+            if len(annotations[batch_id]["labels"]) == 0:
+                continue
+            batch_position_loss, batch_classification_loss, batch_obj_detection_loss = calc_batch_loss(detections[batch_id], annotations[batch_id], obj_gain, no_obj_gain)
             
             position_loss += batch_position_loss
-            scale_loss += batch_scale_loss
             classification_loss += batch_classification_loss
             obj_detection_loss += batch_obj_detection_loss
 
     return (
         (coordinates_gain) * position_loss,
-        (coordinates_gain) * scale_loss,
         obj_detection_loss,
         (classification_gain) * classification_loss,
     )

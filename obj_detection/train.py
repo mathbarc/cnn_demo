@@ -58,10 +58,11 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
         cnn : model.YoloV2, 
         lr : float = 0.001,
         epochs : int = 1000, 
+        gradient_clip: float = 0.5,
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         coordinates_loss_gain: float = 1.,
         classification_loss_gain: float = 1.,
-        obj_loss_gain: float = 5.,
+        obj_loss_gain: float = 1.,
         no_obj_loss_gain: float = 1.,
         ):
 
@@ -73,7 +74,7 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
 
     best_map = 0
 
-    mlflow.set_tracking_uri("http://mlflow.cluster.local")
+    # mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
     if experiment is None:
         experiment_id = mlflow.create_experiment("Object Detection")
@@ -88,6 +89,7 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
         "epoch": epochs,
         "coordinates_loss_gain": coordinates_loss_gain,
         "no_obj_loss_gain": no_obj_loss_gain,
+        "gradient_clip": gradient_clip
     }
     
     mlflow.log_params(training_params)
@@ -100,18 +102,19 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
     epoch_obj_detection_loss = 0
     epoch_classification_loss = 0
 
+    batch_counter = 0
     for i in range(epochs):
 
         cnn.train()
 
-        for imgs, anns in dataloader:
-
+        for imgs, anns in tqdm(dataloader):
+            
             imgs = imgs.to(device)
 
             output = cnn(imgs)
 
             (
-                position_loss, scale_loss, obj_detection_loss, classification_loss
+                position_loss, obj_detection_loss, classification_loss
             ) = model.calc_obj_detection_loss(
                 output,
                 anns,
@@ -122,36 +125,43 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
                 parallel=False
             )
 
-            total_loss = position_loss + scale_loss + obj_detection_loss + classification_loss
+            total_loss = position_loss + obj_detection_loss + classification_loss
 
             epoch_total_loss += total_loss.item()
             epoch_position_loss += position_loss.item()
-            epoch_scale_loss += scale_loss.item()
             epoch_obj_detection_loss += obj_detection_loss.item()
             epoch_classification_loss += classification_loss.item()
 
             total_loss.backward()
+            torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
             optimizer.step()
 
-        scheduler.step()
-        metrics = {
-            "total_loss": epoch_total_loss,
-            "position_loss": epoch_position_loss,
-            "scale_loss": epoch_scale_loss,
-            "class_loss": epoch_classification_loss,
-            "object_presence_loss": epoch_obj_detection_loss,
-            "lr": scheduler.get_last_lr()[0],
-        }
+            batch_counter+=1
+            metrics = {
+                "total_loss": total_loss.item(),
+                "position_loss": position_loss.item(),
+                "class_loss": classification_loss.item(),
+                "object_presence_loss": obj_detection_loss.item()
+            }
+            
+            mlflow.log_metrics(metrics, batch_counter)
 
+        scheduler.step()
         cnn.eval()
+        
+        metrics = {
+                "epoch_total_loss": epoch_total_loss,
+                "epoch_position_loss": epoch_position_loss,
+                "epoch_class_loss": epoch_classification_loss,
+                "epoch_object_presence_loss": epoch_obj_detection_loss,
+                "lr": scheduler.get_last_lr()[0],
+            }
 
         performance_metrics = calculate_metrics(
             cnn, validation_dataset, device
         )
-        metrics["valid_map"] = performance_metrics
-
-
-        mlflow.log_metrics(metrics, i)
+        metrics["epoch_valid_map"] = performance_metrics
+        mlflow.log_metrics(metrics, batch_counter)
 
         if best_map < performance_metrics:
             best_map = performance_metrics
@@ -172,13 +182,17 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
-    dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/images","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
-    validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/images_valid","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
-    dataloader = data_loader.ObjDetectionDataLoader(dataset, 8, 368, 512)
+    dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/train2017","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
+    validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/val2017","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
+    
+    # dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Train.json")
+    # validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Test.json")
+    
+    dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
 
     cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
 
-    train(dataloader, validation_dataset, cnn)
+    train(dataloader, validation_dataset, cnn, 1e-3)
 
 
 
