@@ -41,6 +41,7 @@ class YoloOutput(torch.nn.Module):
         
         obj = torch.sigmoid(grid[:,:,4]).unsqueeze(2)
         classes = torch.softmax(grid[:,:,5:],dim=2)
+        # classes = grid[:,:,5:]
 
         final_boxes = torch.cat((x,y,w,h,obj,classes), dim=2)
         
@@ -129,13 +130,16 @@ def calc_batch_loss(detections:torch.Tensor, annotations, obj_gain, no_obj_gain)
     batch_obj_detection_loss = 0   
     
     obj_boxes = detections[:,:,:,0:4]
-    ann_boxes = annotations["boxes"].to(detections.device)
-    ann_classes = torch.LongTensor(annotations["labels"]).to(detections.device)
-
     obj_boxes_xyxy = torchvision.ops.box_convert(obj_boxes, "cxcywh", "xyxy")
     
+    zero = torch.zeros([1], device=detections.device,requires_grad=False)
 
-    if len(annotations) > 0:
+    if annotations["boxes"].shape[0] > 0:
+        
+        one = torch.ones([1], device=detections.device,requires_grad=False)[0]
+        
+        ann_boxes = annotations["boxes"].to(detections.device)
+        ann_classes = annotations["labels"].to(detections.device)
         
         ann_xyxy = torchvision.ops.box_convert(ann_boxes, "cxcywh", "xyxy")
         contains_obj = torch.ones((detections.shape[0],detections.shape[1],detections.shape[2],2), device=detections.device)*(-1)
@@ -143,17 +147,16 @@ def calc_batch_loss(detections:torch.Tensor, annotations, obj_gain, no_obj_gain)
         for i in range(ann_xyxy.size(0)):
             ann_box = ann_xyxy[i]
 
-            cellX = int((ann_box[0].item() + ann_box[2].item()) * 0.5 * detections.size(1))
-            cellY = int((ann_box[1].item() + ann_box[3].item()) * 0.5 * detections.size(0))
+            cellX = int((ann_box[0].item() + ann_box[2].item()) * 0.5 * detections.size(2))
+            cellY = int((ann_box[1].item() + ann_box[3].item()) * 0.5 * detections.size(1))
 
             iou = torchvision.ops.box_iou(obj_boxes_xyxy[:,cellY, cellX,:], ann_box.view(1,-1))
             best_iou_id = iou.argmax().tolist()
 
-            contains_obj[cellY, cellX, best_iou_id, 0] = i
-            contains_obj[cellY, cellX, best_iou_id, 1] = iou[best_iou_id]
+            contains_obj[best_iou_id, cellY, cellX, 0] = i
+            contains_obj[best_iou_id, cellY, cellX, 1] = iou[best_iou_id]
 
-        zero = torch.zeros([1], device=detections.device)
-        one = torch.ones([1], device=detections.device)
+        
 
         for i in range(detections.shape[0]):
             for j in range(detections.shape[1]):
@@ -170,8 +173,13 @@ def calc_batch_loss(detections:torch.Tensor, annotations, obj_gain, no_obj_gain)
                     else:
                         batch_obj_detection_loss += no_obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4].view([1]), zero)
 
-    if torch.isnan(batch_position_loss) or torch.isnan(batch_classification_loss) or torch.isnan(batch_obj_detection_loss):
-        ...
+    else:
+        for i in range(detections.shape[0]):
+            for j in range(detections.shape[1]):
+                for k in range(detections.shape[2]):
+                    batch_obj_detection_loss += no_obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4].view([1]), zero)
+    
+    
     return batch_position_loss, batch_classification_loss, batch_obj_detection_loss
 
 
@@ -191,9 +199,6 @@ def calc_obj_detection_loss(
     classification_loss = 0
     obj_detection_loss = 0
     
-
-    
-
     if parallel:
 
         executor = concurrent.futures.ThreadPoolExecutor(n_batches)
@@ -214,8 +219,7 @@ def calc_obj_detection_loss(
     else:
 
         for batch_id in range(n_batches):
-            if len(annotations[batch_id]["labels"]) == 0:
-                continue
+            
             batch_position_loss, batch_classification_loss, batch_obj_detection_loss = calc_batch_loss(detections[batch_id], annotations[batch_id], obj_gain, no_obj_gain)
             
             position_loss += batch_position_loss
@@ -223,9 +227,9 @@ def calc_obj_detection_loss(
             obj_detection_loss += batch_obj_detection_loss
 
     return (
-        (coordinates_gain) * position_loss,
-        obj_detection_loss,
-        (classification_gain) * classification_loss,
+        ((coordinates_gain) * position_loss)/n_batches,
+        (obj_detection_loss)/n_batches,
+        ((classification_gain) * classification_loss)/n_batches,
     )
 
 

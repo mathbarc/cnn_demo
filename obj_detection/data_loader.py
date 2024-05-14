@@ -3,6 +3,7 @@ import os
 from pycocotools.coco import COCO
 
 import torch
+import torch.utils
 import torchvision
 from torch.utils.data import Dataset
 from torchvision.transforms.functional import resize
@@ -60,10 +61,12 @@ class CocoDataset(Dataset):
                   (ann["bbox"][2]/coco_img["width"]), 
                   (ann["bbox"][3]/coco_img["height"])] 
                   for ann in coco_ann]
-        boxesTensor = torch.FloatTensor(boxes)
-        labels = [self._label_dict[ann["category_id"]]["id"] for ann in coco_ann]
+        with torch.no_grad():
+            boxesTensor = torch.FloatTensor(boxes)
+            labels = torch.LongTensor([self._label_dict[ann["category_id"]]["id"] for ann in coco_ann])
+            # labels = torch.nn.functional.one_hot(labels, self.get_categories_count()).float()
 
-        return img, {"boxes": boxesTensor, "labels": labels}
+            return img, {"boxes": boxesTensor, "labels": labels}
     
     def __len__(self):
         return len(self.img_ids)
@@ -133,20 +136,25 @@ class ObjDetectionDataLoader:
             
             self.position = end
 
-            inputData = inputData.float()*(1./255.)
+            inputData = inputData*(1./255.)
 
-        return inputData, annotations
+            return inputData.float(), annotations
 
     def __len__(self):
-        return len(self.objDetectionDataset)/self.batch_size
+        return int(len(self.objDetectionDataset)/self.batch_size)
 
 if __name__=="__main__":
-    dataset = CocoDataset("/data/hd1/Dataset/Coco/train2017","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
+    dataset = CocoDataset("/data/hd1/Dataset/Coco/val2017","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
     dataloader = ObjDetectionDataLoader(dataset, 8, 368, 512)
     
     print(dataset.get_categories_count())
+    device = torch.device("cuda")
     
-    it = iter(dataloader)
-    img, ann = next(it)
+    for img, ann in dataloader:
+        img = img.to(device)
+        if img.dtype != torch.float:
+            print(type(img))
+        if img.max() > 1:
+            print(img.max())
 
     ...    

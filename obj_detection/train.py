@@ -64,13 +64,12 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
         classification_loss_gain: float = 1.,
         obj_loss_gain: float = 1.,
         no_obj_loss_gain: float = 1.,
+        lr_ramp_down:int = 100
         ):
 
     cnn = cnn.to(device)
 
-    optimizer = torch.optim.Adam(cnn.parameters(), lr)
-
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs, 1e-8)
+    optimizer = torch.optim.SGD(cnn.parameters(), 1e-2)
 
     best_map = 0
 
@@ -89,7 +88,8 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
         "epoch": epochs,
         "coordinates_loss_gain": coordinates_loss_gain,
         "no_obj_loss_gain": no_obj_loss_gain,
-        "gradient_clip": gradient_clip
+        "gradient_clip": gradient_clip,
+        "lr_ramp_down": lr_ramp_down,
     }
     
     mlflow.log_params(training_params)
@@ -107,7 +107,7 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
 
         cnn.train()
 
-        for imgs, anns in tqdm(dataloader):
+        for imgs, anns in tqdm(dataloader, total=len(dataloader)):
             
             imgs = imgs.to(device)
 
@@ -133,28 +133,43 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
             epoch_classification_loss += classification_loss.item()
 
             total_loss.backward()
-            torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
+            if batch_counter >= lr_ramp_down:
+                torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
+            else:
+                torch.nn.utils.clip_grad_norm_(cnn.parameters(), 5)
+            
+            if batch_counter == lr_ramp_down:
+                for g in optimizer.param_groups:
+                    g['lr'] = lr
+                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, (epochs*len(dataloader))-lr_ramp_down, 1e-8)
+            
+            
             optimizer.step()
-
-            batch_counter+=1
+            
             metrics = {
                 "total_loss": total_loss.item(),
                 "position_loss": position_loss.item(),
                 "class_loss": classification_loss.item(),
-                "object_presence_loss": obj_detection_loss.item()
+                "object_presence_loss": obj_detection_loss.item(), 
+                "lr": optimizer.param_groups[0]["lr"]  
             }
+            
+            if batch_counter >= lr_ramp_down:    
+                scheduler.step()
+            
+            
+            batch_counter+=1
             
             mlflow.log_metrics(metrics, batch_counter)
 
-        scheduler.step()
+        
         cnn.eval()
         
         metrics = {
-                "epoch_total_loss": epoch_total_loss,
-                "epoch_position_loss": epoch_position_loss,
-                "epoch_class_loss": epoch_classification_loss,
-                "epoch_object_presence_loss": epoch_obj_detection_loss,
-                "lr": scheduler.get_last_lr()[0],
+                "epoch_total_loss": epoch_total_loss/len(dataloader),
+                "epoch_position_loss": epoch_position_loss/len(dataloader),
+                "epoch_class_loss": epoch_classification_loss/len(dataloader),
+                "epoch_object_presence_loss": epoch_obj_detection_loss/len(dataloader),
             }
 
         performance_metrics = calculate_metrics(
@@ -192,7 +207,7 @@ if __name__ == "__main__":
 
     cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
 
-    train(dataloader, validation_dataset, cnn, 1e-3)
+    train(dataloader, validation_dataset, cnn, 1e-4,10,.5)
 
 
 
