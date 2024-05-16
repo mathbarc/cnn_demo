@@ -25,6 +25,7 @@ def calculate_metrics(
         for img, ann in tqdm(dataset):
             img = torch.unsqueeze(img, 0).to(device)
             detections = cnn(img).squeeze().to("cpu")
+            detections = detections.reshape((detections.shape[0]*detections.shape[1]*detections.shape[2],detections.shape[3]))
             
             boxes = detections[:,0:4]
             objectiviness = detections[:,4]
@@ -45,10 +46,10 @@ def calculate_metrics(
             # result["scores"] = torch.index_select(result["scores"], 0, best_boxes)
             results.append(result)
 
-            target = {"boxes": ann[:, :4], "labels": torch.argmax(ann[:, 4:], 1).int()}
+            target = {"boxes": ann["boxes"], "labels": torch.argmax(ann["labels"], 1).int()}
             targets.append(target)
-
-        metrics_calculator.update(results, targets)
+            
+            metrics_calculator.update(results, targets)
         metrics = metrics_calculator.compute()
     cnn.train()
     return metrics["map"].item()
@@ -62,8 +63,8 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         coordinates_loss_gain: float = 1.,
         classification_loss_gain: float = 1.,
-        obj_loss_gain: float = 1.,
-        no_obj_loss_gain: float = 1.,
+        obj_loss_gain: float = 5.,
+        no_obj_loss_gain: float = .5,
         lr_ramp_down:int = 100
         ):
 
@@ -87,6 +88,8 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
         "lr": lr,
         "epoch": epochs,
         "coordinates_loss_gain": coordinates_loss_gain,
+        "classification_loss_gain": classification_loss_gain,
+        "obj_loss_gain": obj_loss_gain,
         "no_obj_loss_gain": no_obj_loss_gain,
         "gradient_clip": gradient_clip,
         "lr_ramp_down": lr_ramp_down,
@@ -133,16 +136,15 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
             epoch_classification_loss += classification_loss.item()
 
             total_loss.backward()
-            if batch_counter >= lr_ramp_down:
-                torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
-            else:
-                torch.nn.utils.clip_grad_norm_(cnn.parameters(), 5)
+            torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
             
             if batch_counter == lr_ramp_down:
                 for g in optimizer.param_groups:
                     g['lr'] = lr
-                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, (epochs*len(dataloader))-lr_ramp_down, 1e-8)
-            
+                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, (len(dataloader))-lr_ramp_down, 1e-8)
+                
+            if batch_counter % 100 == 99:
+                cnn.save_model("last", device=device)
             
             optimizer.step()
             
@@ -157,12 +159,14 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
             if batch_counter >= lr_ramp_down:    
                 scheduler.step()
             
-            
+                        
             batch_counter+=1
             
             mlflow.log_metrics(metrics, batch_counter)
 
-        
+        for g in optimizer.param_groups:
+            g['lr'] = lr
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, (len(dataloader)), 1e-8)
         cnn.eval()
         
         metrics = {
@@ -172,17 +176,17 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
                 "epoch_object_presence_loss": epoch_obj_detection_loss/len(dataloader),
             }
 
-        performance_metrics = calculate_metrics(
-            cnn, validation_dataset, device
-        )
-        metrics["epoch_valid_map"] = performance_metrics
+        # performance_metrics = calculate_metrics(
+        #     cnn, validation_dataset, device
+        # )
+        # metrics["epoch_valid_map"] = performance_metrics
         mlflow.log_metrics(metrics, batch_counter)
 
-        if best_map < performance_metrics:
-            best_map = performance_metrics
-            cnn.save_model("obj_detection_best")
+        # if best_map < performance_metrics:
+        #     best_map = performance_metrics
+        #     cnn.save_model("obj_detection_best")
         
-        cnn.save_model("obj_detection_last")
+        cnn.save_model(f"obj_detection_{i}",device=device)
 
 
         ...
@@ -205,9 +209,10 @@ if __name__ == "__main__":
     
     dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
 
-    cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
+    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
+    cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
-    train(dataloader, validation_dataset, cnn, 1e-4,10,.5)
+    train(dataloader, validation_dataset, cnn, 1e-3,10,5)
 
 
 

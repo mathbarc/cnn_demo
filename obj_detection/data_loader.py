@@ -8,6 +8,7 @@ import torchvision
 from torch.utils.data import Dataset
 from torchvision.transforms.functional import resize
 from torchvision.io import read_image
+from torchvision.transforms.v2.functional import grayscale_to_rgb
 
 import random
 import time
@@ -53,6 +54,9 @@ class CocoDataset(Dataset):
         
         img = read_image(img_path)
         
+        if(img.shape[0] == 1):
+            img = grayscale_to_rgb(img)
+        
         list_coco_ann = self._coco.getAnnIds(img_id)
         coco_ann = self._coco.loadAnns(list_coco_ann)
 
@@ -64,7 +68,7 @@ class CocoDataset(Dataset):
         with torch.no_grad():
             boxesTensor = torch.FloatTensor(boxes)
             labels = torch.LongTensor([self._label_dict[ann["category_id"]]["id"] for ann in coco_ann])
-            # labels = torch.nn.functional.one_hot(labels, self.get_categories_count()).float()
+            labels = torch.nn.functional.one_hot(labels, self.get_categories_count()).float()
 
             return img, {"boxes": boxesTensor, "labels": labels}
     
