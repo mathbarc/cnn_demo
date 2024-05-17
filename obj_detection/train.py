@@ -16,40 +16,47 @@ def calculate_metrics(
 ):
     cnn.eval()
 
-    results = []
-    targets = []
+    
+    
 
     metrics_calculator = torchmetrics.detection.MeanAveragePrecision(box_format="cxcywh",class_metrics=True).to(device=device)
+    
 
     with torch.no_grad():
         for img, ann in tqdm(dataset):
             img = torch.unsqueeze(img, 0).to(device)
+            # img = torch.reshape(img,(1,3,416,416))
             detections = cnn(img).squeeze().to("cpu")
             detections = detections.reshape((detections.shape[0]*detections.shape[1]*detections.shape[2],detections.shape[3]))
             
-            boxes = detections[:,0:4]
-            objectiviness = detections[:,4]
-            classes = detections[:,5:]
+            boxes = torch.FloatTensor(size=(0,4))
+            objectiviness = torch.FloatTensor(size=(0,1))
+            classes = torch.IntTensor(size=(0,1))
+
+            for i in range(detections.shape[0]):
+                if detections[i,4]>0.5:
+                    boxes = torch.cat((boxes, detections[i,0:4].unsqueeze(0)))
+                    objectiviness = torch.cat((objectiviness, detections[i,4].view(1,1)))
+                    classes = torch.cat((classes, (torch.argmax(detections[i,5:]).int()).view(1,1)))
+                    
 
             result = {
                 "boxes": boxes,
-                "labels": torch.argmax(
-                    classes, 1
-                ).int(),
-                "scores": objectiviness,
+                "labels": classes[:,0],
+                "scores": objectiviness[:,0],
             }
 
-            # best_boxes = torchvision.ops.nms(result["boxes"], result["scores"], 0.4)
+            best_boxes = torchvision.ops.nms(result["boxes"], result["scores"], 0.5)
 
-            # result["boxes"] = torch.index_select(result["boxes"], 0, best_boxes)
-            # result["labels"] = torch.index_select(result["labels"], 0, best_boxes)
-            # result["scores"] = torch.index_select(result["scores"], 0, best_boxes)
-            results.append(result)
+            result["boxes"] = torch.index_select(result["boxes"], 0, best_boxes)
+            result["labels"] = torch.index_select(result["labels"], 0, best_boxes)
+            result["scores"] = torch.index_select(result["scores"], 0, best_boxes)
+            
 
             target = {"boxes": ann["boxes"], "labels": torch.argmax(ann["labels"], 1).int()}
-            targets.append(target)
             
-            metrics_calculator.update(results, targets)
+            
+            metrics_calculator.update([result], [target])
         metrics = metrics_calculator.compute()
     cnn.train()
     return metrics["map"].item()
@@ -164,7 +171,6 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
             if batch_counter >= lr_ramp_down:    
                 scheduler.step()
             
-                        
             batch_counter+=1
             
             mlflow.log_metrics(metrics, batch_counter)
@@ -174,17 +180,15 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, (len(dataloader)), 1e-8)
         cnn.eval()
         
+        
+        performance_metrics = calculate_metrics(
+            cnn, validation_dataset, device
+        )
+        
+        
         metrics = {
-                "epoch_total_loss": epoch_total_loss/len(dataloader),
-                "epoch_position_loss": epoch_position_loss/len(dataloader),
-                "epoch_class_loss": epoch_classification_loss/len(dataloader),
-                "epoch_object_presence_loss": epoch_obj_detection_loss/len(dataloader),
-            }
-
-        # performance_metrics = calculate_metrics(
-        #     cnn, validation_dataset, device
-        # )
-        # metrics["epoch_valid_map"] = performance_metrics
+            "valid_map": performance_metrics
+        }
         mlflow.log_metrics(metrics, batch_counter)
 
         # if best_map < performance_metrics:
@@ -217,7 +221,7 @@ if __name__ == "__main__":
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
     cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
-    train(dataloader, validation_dataset, cnn, 1e-3,10,5, lr_ramp_down=10, obj_loss_gain=1., no_obj_loss_gain=0.5, classification_loss_gain=1, coordinates_loss_gain=1)
+    train(dataloader, validation_dataset, cnn, 1e-3,10,5, lr_ramp_down=100, obj_loss_gain=1., no_obj_loss_gain=0.5, classification_loss_gain=1, coordinates_loss_gain=1)
 
 
 
