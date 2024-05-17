@@ -71,6 +71,7 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
     cnn = cnn.to(device)
 
     optimizer = torch.optim.SGD(cnn.parameters(), 1e-2)
+    # optimizer = torch.optim.Adam(cnn.parameters(), 1e-2)
 
     best_map = 0
 
@@ -136,7 +137,11 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
             epoch_classification_loss += classification_loss.item()
 
             total_loss.backward()
-            torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
+            
+            if batch_counter >= lr_ramp_down:
+                torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
+            else:
+                torch.nn.utils.clip_grad_norm_(cnn.parameters(), 10)
             
             if batch_counter == lr_ramp_down:
                 for g in optimizer.param_groups:
@@ -201,18 +206,18 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
-    dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/train2017","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
-    validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/val2017","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
+    # dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/train2017","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
+    # validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/val2017","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
     
-    # dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Train.json")
-    # validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Test.json")
+    dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Train.json")
+    validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Test.json")
     
     dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
 
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
     cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
-    train(dataloader, validation_dataset, cnn, 1e-3,10,5)
+    train(dataloader, validation_dataset, cnn, 1e-3,10,5, lr_ramp_down=10, obj_loss_gain=1., no_obj_loss_gain=0.5, classification_loss_gain=1, coordinates_loss_gain=1)
 
 
 
