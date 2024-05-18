@@ -77,8 +77,8 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
 
     cnn = cnn.to(device)
 
-    optimizer = torch.optim.SGD(cnn.parameters(), 1e-2)
-    # optimizer = torch.optim.Adam(cnn.parameters(), 1e-2)
+    # optimizer = torch.optim.SGD(cnn.parameters(), 1e-3, momentum=9e-1, weight_decay=5e-4)
+    optimizer = torch.optim.Adam(cnn.parameters(), 1e-2, weight_decay=5e-4)
 
     best_map = 0
 
@@ -105,14 +105,6 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
     
     mlflow.log_params(training_params)
 
-    
-
-    epoch_total_loss = 0
-    epoch_position_loss = 0
-    epoch_scale_loss = 0
-    epoch_obj_detection_loss = 0
-    epoch_classification_loss = 0
-
     batch_counter = 0
     for i in range(epochs):
 
@@ -137,28 +129,27 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
             )
 
             total_loss = position_loss + obj_detection_loss + classification_loss
-
-            epoch_total_loss += total_loss.item()
-            epoch_position_loss += position_loss.item()
-            epoch_obj_detection_loss += obj_detection_loss.item()
-            epoch_classification_loss += classification_loss.item()
-
             total_loss.backward()
             
-            if batch_counter >= lr_ramp_down:
-                torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
-            else:
-                torch.nn.utils.clip_grad_norm_(cnn.parameters(), 10)
-            
+            # if batch_counter >= lr_ramp_down:
+            #     torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
+            # else:
+            #     torch.nn.utils.clip_grad_norm_(cnn.parameters(), 10*gradient_clip)
+                
             if batch_counter == lr_ramp_down:
                 for g in optimizer.param_groups:
                     g['lr'] = lr
-                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, (len(dataloader))-lr_ramp_down, 1e-8)
+                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, (epochs*len(dataloader))-lr_ramp_down, 1e-8)
                 
+            optimizer.step()
+            
+            if batch_counter >= lr_ramp_down:    
+                scheduler.step()
+            
             if batch_counter % 100 == 99:
                 cnn.save_model("last", device=device)
             
-            optimizer.step()
+            batch_counter+=1
             
             metrics = {
                 "total_loss": total_loss.item(),
@@ -168,16 +159,9 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
                 "lr": optimizer.param_groups[0]["lr"]  
             }
             
-            if batch_counter >= lr_ramp_down:    
-                scheduler.step()
-            
-            batch_counter+=1
-            
             mlflow.log_metrics(metrics, batch_counter)
 
-        for g in optimizer.param_groups:
-            g['lr'] = lr
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, (len(dataloader)), 1e-8)
+        
         cnn.eval()
         
         
@@ -191,11 +175,12 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
         }
         mlflow.log_metrics(metrics, batch_counter)
 
-        # if best_map < performance_metrics:
-        #     best_map = performance_metrics
-        #     cnn.save_model("obj_detection_best")
+        if best_map < performance_metrics:
+            best_map = performance_metrics
+            cnn.save_model("obj_detection_best")
         
         cnn.save_model(f"obj_detection_{i}",device=device)
+        
 
 
         ...
@@ -221,7 +206,7 @@ if __name__ == "__main__":
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
     cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
-    train(dataloader, validation_dataset, cnn, 1e-3,100,5, lr_ramp_down=100, obj_loss_gain=1., no_obj_loss_gain=0.5, classification_loss_gain=1, coordinates_loss_gain=1)
+    train(dataloader, validation_dataset, cnn, 1e-3,100,1, lr_ramp_down=0, obj_loss_gain=1., no_obj_loss_gain=0.5, classification_loss_gain=1, coordinates_loss_gain=1)
 
 
 
