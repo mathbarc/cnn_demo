@@ -3,11 +3,52 @@ import torch.utils.data
 import torchvision
 import torchmetrics.detection
 from tqdm import tqdm
+import math
 
 import data_loader
 import model
 
 import mlflow
+
+
+class ObjDetectionLR:
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_overshoot:float, lr_final:float, n_steps:int, overshoot_period:int):
+        self._optimizer = optimizer
+        
+        self._lr_base = lr_base
+        self._lr_overshoot = lr_overshoot
+        
+        self._n_steps = n_steps
+        self._current_step = 0
+        self._overshoot_period = overshoot_period
+        
+        self._overshoot_expand = math.log(lr_overshoot, lr_base) / overshoot_period
+        self._overshoot_decay = math.log(lr_base, lr_overshoot) / overshoot_period
+        self._decay = math.log(lr_final, lr_base) / (n_steps-2*overshoot_period)
+    
+    def step(self):
+        
+        lr = self.get_last_lr()
+            
+        for param_group in self._optimizer.param_groups:
+            param_group['lr'] = lr
+        
+        self._current_step+=1
+            
+    def get_last_lr(self):
+        
+        if self._current_step >= 2*self._overshoot_period:
+            lr = self._lr_base * math.pow(self._decay, self._current_step-(2*self._overshoot_period))
+        
+        elif self._current_step < self._overshoot_period:
+            lr = self._lr_base * math.pow(self._overshoot_expand, self._current_step)
+        
+        elif self._overshoot_period < self._current_step and self._current_step < 2*self._overshoot_period:
+            lr = self._lr_overshoot * math.pow(self._overshoot_decay, self._current_step-self._overshoot_period)
+        
+        return lr
+
+
 
 def calculate_metrics(
     cnn: torch.nn.Module,
@@ -16,12 +57,8 @@ def calculate_metrics(
 ):
     cnn.eval()
 
+    metrics_calculator = torchmetrics.detection.MeanAveragePrecision(box_format="cxcywh",iou_thresholds=[0.5], rec_thresholds=[0.4],class_metrics=True).to(device=device)
     
-    
-
-    metrics_calculator = torchmetrics.detection.MeanAveragePrecision(box_format="cxcywh",class_metrics=True).to(device=device)
-    
-
     with torch.no_grad():
         for img, ann in tqdm(dataset):
             img = torch.unsqueeze(img, 0).to(device)
@@ -46,11 +83,11 @@ def calculate_metrics(
                 "scores": objectiviness[:,0],
             }
 
-            best_boxes = torchvision.ops.nms(result["boxes"], result["scores"], 0.5)
+            # best_boxes = torchvision.ops.nms(result["boxes"], result["scores"], 0.5)
 
-            result["boxes"] = torch.index_select(result["boxes"], 0, best_boxes)
-            result["labels"] = torch.index_select(result["labels"], 0, best_boxes)
-            result["scores"] = torch.index_select(result["scores"], 0, best_boxes)
+            # result["boxes"] = torch.index_select(result["boxes"], 0, best_boxes)
+            # result["labels"] = torch.index_select(result["labels"], 0, best_boxes)
+            # result["scores"] = torch.index_select(result["scores"], 0, best_boxes)
             
 
             target = {"boxes": ann["boxes"], "labels": torch.argmax(ann["labels"], 1).int()}
@@ -61,24 +98,24 @@ def calculate_metrics(
     cnn.train()
     return metrics["map"].item()
 
-def train(dataloader : data_loader.ObjDetectionDataLoader, 
-          validation_dataset : data_loader.CocoDataset,
-        cnn : model.YoloV2, 
-        lr : float = 0.001,
-        epochs : int = 1000, 
-        gradient_clip: float = 0.5,
-        device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-        coordinates_loss_gain: float = 1.,
-        classification_loss_gain: float = 1.,
-        obj_loss_gain: float = 5.,
-        no_obj_loss_gain: float = .5,
-        lr_ramp_down:int = 100
+def train(  dataloader : data_loader.ObjDetectionDataLoader, 
+            validation_dataset : data_loader.CocoDataset,
+            cnn : model.YoloV2, 
+            lr : float = 0.001,
+            epochs : int = 1000, 
+            gradient_clip: float = 0.5,
+            device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+            coordinates_loss_gain: float = 1.,
+            classification_loss_gain: float = 1.,
+            obj_loss_gain: float = 5.,
+            no_obj_loss_gain: float = .5,
+            lr_ramp_down:int = 100
         ):
 
     cnn = cnn.to(device)
 
-    # optimizer = torch.optim.SGD(cnn.parameters(), 1e-3, momentum=9e-1, weight_decay=5e-4)
-    optimizer = torch.optim.Adam(cnn.parameters(), 1e-2, weight_decay=5e-4)
+    optimizer = torch.optim.SGD(cnn.parameters(), 1e-2, momentum=9e-1, weight_decay=5e-4)
+    # optimizer = torch.optim.Adam(cnn.parameters(), 1e-2, weight_decay=5e-4)
 
     best_map = 0
 
@@ -111,6 +148,7 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
         cnn.train()
 
         for imgs, anns in tqdm(dataloader, total=len(dataloader)):
+            optimizer.zero_grad()
             
             imgs = imgs.to(device)
 
@@ -131,10 +169,8 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
             total_loss = position_loss + obj_detection_loss + classification_loss
             total_loss.backward()
             
-            # if batch_counter >= lr_ramp_down:
-            #     torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
-            # else:
-            #     torch.nn.utils.clip_grad_norm_(cnn.parameters(), 10*gradient_clip)
+            torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
+            
                 
             if batch_counter == lr_ramp_down:
                 for g in optimizer.param_groups:
@@ -179,7 +215,7 @@ def train(dataloader : data_loader.ObjDetectionDataLoader,
             best_map = performance_metrics
             cnn.save_model("obj_detection_best")
         
-        cnn.save_model(f"obj_detection_{i}",device=device)
+        cnn.save_model(f"obj_detection_last",device=device)
         
 
 
@@ -203,10 +239,10 @@ if __name__ == "__main__":
     
     dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
 
-    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
-    cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
+    cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
+    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
-    train(dataloader, validation_dataset, cnn, 1e-3,100,1, lr_ramp_down=0, obj_loss_gain=1., no_obj_loss_gain=0.5, classification_loss_gain=1, coordinates_loss_gain=1)
+    train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=10, lr_ramp_down=90, obj_loss_gain=5., no_obj_loss_gain=1., classification_loss_gain=1., coordinates_loss_gain=1.)
 
 
 
