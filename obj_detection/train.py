@@ -2,6 +2,8 @@ import torch
 import torch.utils.data
 import torchvision
 import torchmetrics.detection
+
+import torchvision.transforms.functional
 from tqdm import tqdm
 import math
 
@@ -21,10 +23,10 @@ class ObjDetectionLR:
         self._n_steps = n_steps
         self._current_step = 0
         self._overshoot_period = overshoot_period
+        self._decay_period = n_steps-overshoot_period
         
-        self._overshoot_expand = math.log(lr_overshoot, lr_base) / overshoot_period
-        self._overshoot_decay = math.log(lr_base, lr_overshoot) / overshoot_period
-        self._decay = math.log(lr_final, lr_base) / (n_steps-2*overshoot_period)
+        self._overshoot_amplitude = self._lr_overshoot - self._lr_base
+        self._decay_amplitude = lr_final - self._lr_base
     
     def step(self):
         
@@ -37,14 +39,13 @@ class ObjDetectionLR:
             
     def get_last_lr(self):
         
-        if self._current_step >= 2*self._overshoot_period:
-            lr = self._lr_base * math.pow(self._decay, self._current_step-(2*self._overshoot_period))
-        
+        if self._current_step >= self._overshoot_period:
+            lr = self._lr_base + self._decay_amplitude * math.sin((math.pi/2)*((self._current_step-self._overshoot_period)/self._decay_period))
+            
         elif self._current_step < self._overshoot_period:
-            lr = self._lr_base * math.pow(self._overshoot_expand, self._current_step)
+            lr = self._lr_base + self._overshoot_amplitude * math.sin((math.pi)*(self._current_step/self._overshoot_period))
         
-        elif self._overshoot_period < self._current_step and self._current_step < 2*self._overshoot_period:
-            lr = self._lr_overshoot * math.pow(self._overshoot_decay, self._current_step-self._overshoot_period)
+        
         
         return lr
 
@@ -61,8 +62,8 @@ def calculate_metrics(
     
     with torch.no_grad():
         for img, ann in tqdm(dataset):
+            img = torchvision.transforms.functional.resize(img,(416,416))
             img = torch.unsqueeze(img, 0).to(device)
-            # img = torch.reshape(img,(1,3,416,416))
             detections = cnn(img).squeeze().to("cpu")
             detections = detections.reshape((detections.shape[0]*detections.shape[1]*detections.shape[2],detections.shape[3]))
             
@@ -114,8 +115,10 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
     cnn = cnn.to(device)
 
-    optimizer = torch.optim.SGD(cnn.parameters(), 1e-2, momentum=9e-1, weight_decay=5e-4)
-    # optimizer = torch.optim.Adam(cnn.parameters(), 1e-2, weight_decay=5e-4)
+    optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
+    # optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
+    
+    scheduler = ObjDetectionLR(optimizer, lr, 0.01, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
 
     best_map = 0
 
@@ -169,21 +172,17 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
             total_loss = position_loss + obj_detection_loss + classification_loss
             total_loss.backward()
             
-            torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
-            
-                
-            if batch_counter == lr_ramp_down:
-                for g in optimizer.param_groups:
-                    g['lr'] = lr
-                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, (epochs*len(dataloader))-lr_ramp_down, 1e-8)
+            if batch_counter <= lr_ramp_down:    
+                torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
                 
             optimizer.step()
-            
-            if batch_counter >= lr_ramp_down:    
-                scheduler.step()
-            
+                
+            scheduler.step()
+                        
             if batch_counter % 100 == 99:
                 cnn.save_model("last", device=device)
+                
+            
             
             batch_counter+=1
             
@@ -225,6 +224,8 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
 
 if __name__ == "__main__":
+    
+    
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -242,7 +243,7 @@ if __name__ == "__main__":
     cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
-    train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=10, lr_ramp_down=90, obj_loss_gain=5., no_obj_loss_gain=1., classification_loss_gain=1., coordinates_loss_gain=1.)
+    train(dataloader, validation_dataset, cnn, 1e-4,100, gradient_clip=10, lr_ramp_down=500, obj_loss_gain=5., no_obj_loss_gain=1., classification_loss_gain=1., coordinates_loss_gain=1.)
 
 
 

@@ -16,9 +16,9 @@ def softmax(data):
         exp_data[i,:] = exp_data[i,:]/sums[i]
     return exp_data 
 
+
 net = cv2.dnn.readNetFromONNX("last.onnx")
-# net = cv2.dnn.readNetFromONNX("last.onnx")
-# net = cv2.dnn.readNetFromONNX("object_detection_last.onnx")
+# net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
 # net = cv2.dnn.readNetFromTorch("obj_det.pt")
 # net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")
 
@@ -67,7 +67,7 @@ output = numpy.reshape(output,(output.shape[0]*output.shape[1]*output.shape[2]*o
 
 for b in range(output.shape[0]):
     
-    box = output[b,:4]
+    box = output[b,:4].copy()
     box[0] = box[0] * img.shape[1]
     box[1] = box[1] * img.shape[0]
     box[2] = box[2] * img.shape[1]
@@ -82,7 +82,7 @@ for b in range(output.shape[0]):
     classes.append(cl)
     prob.append(output[b,4])
 
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.4, 0.4)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.04, 0.4)
 end = time.time()
 
 
