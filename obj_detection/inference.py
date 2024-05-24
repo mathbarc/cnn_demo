@@ -22,8 +22,8 @@ net = cv2.dnn.readNetFromONNX("last.onnx")
 # net = cv2.dnn.readNetFromTorch("obj_det.pt")
 # net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")
 
-net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
-net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
 flops = net.getFLOPS((1, 3, 416, 416)) * 10e-9
 print(round(flops, 3), "BFLOPs")
@@ -82,7 +82,7 @@ for b in range(output.shape[0]):
     classes.append(cl)
     prob.append(output[b,4])
 
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.04, 0.4)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.3, 0.4)
 end = time.time()
 
 
