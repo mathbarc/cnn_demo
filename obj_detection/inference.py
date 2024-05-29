@@ -22,8 +22,8 @@ net = cv2.dnn.readNetFromONNX("last.onnx")
 # net = cv2.dnn.readNetFromTorch("obj_det.pt")
 # net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")
 
-net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
 
 flops = net.getFLOPS((1, 3, 416, 416)) * 10e-9
 print(round(flops, 3), "BFLOPs")
@@ -46,10 +46,10 @@ print(round(flops, 3), "BFLOPs")
 # print(mean/10)
 # ...
 
-# img = cv2.imread("/data/hd1/Dataset/Coco/images/000000391895.jpg")
-# labels_str = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" ]
-img = cv2.imread("/data/hd1/Dataset/leafs/images/00190.jpg")
-labels_str = ["disease", "background"]
+img = cv2.imread("/data/hd1/Dataset/Coco/images/000000391895.jpg")
+labels_str = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" ]
+# img = cv2.imread("/data/hd1/Dataset/leafs/images/00235_0.jpg")
+# labels_str = ["disease", "background"]
 input_img = cv2.dnn.blobFromImage(
     img, scalefactor=1.0 / 255.0, size=(416, 416), swapRB=True
 )
@@ -82,7 +82,7 @@ for b in range(output.shape[0]):
     classes.append(cl)
     prob.append(output[b,4])
 
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.3, 0.4)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.4, 0.4)
 end = time.time()
 
 

@@ -115,14 +115,14 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
     cnn = cnn.to(device)
 
-    optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
-    # optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
+    # optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
+    optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
     
     scheduler = ObjDetectionLR(optimizer, lr, 0.01, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
 
     best_map = 0
 
-    # mlflow.set_tracking_uri("http://mlflow.cluster.local")
+    mlflow.set_tracking_uri("http://mlflow.cluster.local")
     experiment = mlflow.get_experiment_by_name("Object Detection")
     if experiment is None:
         experiment_id = mlflow.create_experiment("Object Detection")
@@ -232,16 +232,16 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
-    # dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/train2017","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
-    # validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/val2017","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
+    dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/train2017","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
+    validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/val2017","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
     
-    dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Train.json")
-    validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Test.json")
+    # dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Train.json")
+    # validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Test.json")
     
     dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
 
-    cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
-    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
+    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
+    cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
     train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=10, lr_ramp_down=500, obj_loss_gain=1., no_obj_loss_gain=.05, classification_loss_gain=1., coordinates_loss_gain=1.)
 

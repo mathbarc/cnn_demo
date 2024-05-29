@@ -167,13 +167,13 @@ def calc_batch_loss(detections:torch.Tensor, annotations, obj_gain, no_obj_gain)
                         # batch_position_loss += torch.nn.functional.mse_loss(obj_boxes[i,j,k,0:2],ann_boxes[ann_id,0:2],reduction="sum")
                         # batch_position_loss += torch.nn.functional.mse_loss(torch.sqrt(obj_boxes[i,j,k,2:4]),torch.sqrt(ann_boxes[ann_id,2:4]),reduction="sum")
                         # batch_position_loss += torchvision.ops.distance_box_iou_loss(obj_boxes_xyxy[i,j,k], ann_xyxy[ann_id], reduction="sum")
-                        batch_position_loss += torchvision.ops.complete_box_iou_loss(obj_boxes_xyxy[i,j,k], ann_xyxy[ann_id], reduction="sum")
+                        batch_position_loss += torchvision.ops.complete_box_iou_loss(obj_boxes_xyxy[i,j,k], ann_xyxy[ann_id])
                         # batch_position_loss += torch.nn.functional.mse_loss(obj_boxes[i,j,k],ann_boxes[ann_id],reduction="sum")
                         # batch_position_loss += torch.nn.functional.mse_loss(best_iou, one)
                         # batch_position_loss += 1. - best_iou
                         # batch_obj_detection_loss += obj_gain * (best_iou - detections[i,j,k,4])
                         batch_obj_detection_loss += obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4], best_iou.detach())
-                        batch_classification_loss += torch.nn.functional.binary_cross_entropy(detections[i,j,k,5:], ann_classes[ann_id], reduction="sum")
+                        batch_classification_loss += torch.nn.functional.binary_cross_entropy(detections[i,j,k,5:], ann_classes[ann_id])
                     else:
                         # batch_obj_detection_loss += no_obj_gain * detections[i,j,k,4]
                         batch_obj_detection_loss += no_obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4], zero)
