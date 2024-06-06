@@ -115,14 +115,20 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
     cnn = cnn.to(device)
 
-    # optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
-    optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
+    optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
+    # optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
     
     scheduler = ObjDetectionLR(optimizer, lr, 0.01, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
+    
+    if dataloader.objDetectionDataset.get_categories_count()>1:
+        class_loss = torch.nn.functional.binary_cross_entropy
+    else:
+        class_loss = torch.nn.functional.mse_loss
+    
 
     best_map = 0
 
-    mlflow.set_tracking_uri("http://mlflow.cluster.local")
+    mlflow.set_tracking_uri("https://mlflow.solv.tec.br/")
     experiment = mlflow.get_experiment_by_name("Object Detection")
     if experiment is None:
         experiment_id = mlflow.create_experiment("Object Detection")
@@ -162,6 +168,7 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
             ) = model.calc_obj_detection_loss(
                 output,
                 anns,
+                class_loss,
                 coordinates_gain=coordinates_loss_gain,
                 classification_gain=classification_loss_gain,
                 obj_gain=obj_loss_gain,
@@ -172,8 +179,8 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
             total_loss = position_loss + obj_detection_loss + classification_loss
             total_loss.backward()
             
-            if batch_counter <= lr_ramp_down:    
-                torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
+            # if batch_counter <= lr_ramp_down:    
+            #     torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
                 
             optimizer.step()
                 
@@ -241,9 +248,9 @@ if __name__ == "__main__":
     dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
 
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
-    cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
+    cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434]])
 
-    train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=10, lr_ramp_down=500, obj_loss_gain=1., no_obj_loss_gain=.05, classification_loss_gain=1., coordinates_loss_gain=1.)
+    train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=1000, lr_ramp_down=100, obj_loss_gain=1., no_obj_loss_gain=.5, classification_loss_gain=1., coordinates_loss_gain=1.)
 
 
 
