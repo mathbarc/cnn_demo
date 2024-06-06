@@ -12,8 +12,8 @@ class YoloOutput(torch.nn.Module):
 
         output_layer_channels = (5+n_classes)*len(anchors)        
         self.conv = torch.nn.Conv2d(n_input_activation_maps, output_layer_channels, (1, 1), (1, 1))
-        self.n_classes = torch.tensor(n_classes)
-        self.anchors = torch.Tensor(anchors)
+        self.n_classes = torch.tensor(n_classes, requires_grad=False)
+        self.anchors = torch.tensor(anchors, requires_grad=False)
         
 
     def forward(self, features: torch.Tensor):
@@ -23,8 +23,8 @@ class YoloOutput(torch.nn.Module):
         
         with torch.no_grad():
             grid_cell_position_y, grid_cell_position_x = torch.meshgrid([torch.arange(grid.size(2)), torch.arange(grid.size(3))], indexing='ij')
-            grid_cell_position_y = grid_cell_position_y.to(features.device)
-            grid_cell_position_x = grid_cell_position_x.to(features.device)
+            grid_cell_position_y = grid_cell_position_y.to(features.device).detach()
+            grid_cell_position_x = grid_cell_position_x.to(features.device).detach()
             grid_dimensions = [grid.size(0),self.anchors.size(0), (5+self.n_classes), grid.size(2), grid.size(3)]
         
         grid = grid.reshape(grid_dimensions).to(features.device)
@@ -156,7 +156,7 @@ def calc_batch_loss(detections:torch.Tensor, annotations, class_loss, obj_gain, 
                     if pos in contains_obj:
                         ann_id, best_iou = contains_obj[pos]
                         batch_position_loss += 1-best_iou #torchvision.ops.distance_box_iou_loss(obj_boxes_xyxy[i,j,k], ann_xyxy[ann_id])
-                        batch_obj_detection_with_obj_loss += obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4], best_iou.detach())
+                        batch_obj_detection_with_obj_loss += obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4], best_iou.detach()[0])
                         batch_classification_loss += class_loss(detections[i,j,k,5:], ann_classes[ann_id])
                     else:
                         batch_obj_detection_without_obj_loss += no_obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4], zero)
@@ -224,7 +224,7 @@ def calc_obj_detection_loss(
 
     return (
         (coordinates_gain * position_loss)/n_batches,
-        (obj_detection_loss)/n_batches,
+        obj_detection_loss/n_batches,
         (classification_gain * classification_loss)/n_batches
     )
 

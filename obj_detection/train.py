@@ -104,7 +104,7 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
             cnn : model.YoloV2, 
             lr : float = 0.001,
             epochs : int = 1000, 
-            gradient_clip: float = 0.5,
+            gradient_clip: float | None = None,
             device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
             coordinates_loss_gain: float = 1.,
             classification_loss_gain: float = 1.,
@@ -179,8 +179,8 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
             total_loss = position_loss + obj_detection_loss + classification_loss
             total_loss.backward()
             
-            # if batch_counter <= lr_ramp_down:    
-            #     torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
+            if gradient_clip is not None:    
+                torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
                 
             optimizer.step()
                 
@@ -247,10 +247,10 @@ if __name__ == "__main__":
     
     dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
 
-    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
-    cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434]])
+    cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
+    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434]])
 
-    train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=1000, lr_ramp_down=100, obj_loss_gain=1., no_obj_loss_gain=.5, classification_loss_gain=1., coordinates_loss_gain=1.)
+    train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=None, lr_ramp_down=1000, obj_loss_gain=1., no_obj_loss_gain=.5, classification_loss_gain=1., coordinates_loss_gain=1.)
 
 
 
