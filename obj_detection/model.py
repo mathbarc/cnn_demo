@@ -128,6 +128,7 @@ def calc_batch_loss(detections:torch.Tensor, annotations, class_loss, obj_gain, 
     obj_boxes_xyxy = torchvision.ops.box_convert(obj_boxes, "cxcywh", "xyxy")
     
     zero = torch.zeros([1], device=detections.device,requires_grad=False)[0]
+    one = torch.ones([1], device=detections.device,requires_grad=False)[0]
 
     if annotations["boxes"].shape[0] > 0:
         
@@ -155,16 +156,18 @@ def calc_batch_loss(detections:torch.Tensor, annotations, class_loss, obj_gain, 
                     
                     if pos in contains_obj:
                         ann_id, best_iou = contains_obj[pos]
-                        batch_position_loss += 1-best_iou #torchvision.ops.distance_box_iou_loss(obj_boxes_xyxy[i,j,k], ann_xyxy[ann_id])
+                        batch_position_loss += torch.nn.functional.mse_loss(best_iou, one)
+                        # batch_position_loss += 1-best_iou 
+                        # batch_position_loss += torchvision.ops.distance_box_iou_loss(obj_boxes_xyxy[i,j,k], ann_xyxy[ann_id])
                         batch_obj_detection_with_obj_loss += obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4], best_iou.detach()[0])
                         batch_classification_loss += class_loss(detections[i,j,k,5:], ann_classes[ann_id])
                     else:
                         batch_obj_detection_without_obj_loss += no_obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4], zero)
 
-        # batch_position_loss = batch_position_loss / annotations["boxes"].shape[0]
-        # batch_classification_loss = batch_classification_loss / annotations["boxes"].shape[0]
-        # batch_obj_detection_with_obj_loss = batch_obj_detection_with_obj_loss / annotations["boxes"].shape[0]
-        # batch_obj_detection_without_obj_loss = batch_obj_detection_without_obj_loss / ((detections.shape[0]*detections.shape[1]*detections.shape[2]) - annotations["boxes"].shape[0])
+        batch_position_loss = batch_position_loss / annotations["boxes"].shape[0]
+        batch_classification_loss = batch_classification_loss / annotations["boxes"].shape[0]
+        batch_obj_detection_with_obj_loss = batch_obj_detection_with_obj_loss / annotations["boxes"].shape[0]
+        batch_obj_detection_without_obj_loss = batch_obj_detection_without_obj_loss / ((detections.shape[0]*detections.shape[1]*detections.shape[2]) - annotations["boxes"].shape[0])
 
     else:
         for i in range(detections.shape[0]):
@@ -172,7 +175,7 @@ def calc_batch_loss(detections:torch.Tensor, annotations, class_loss, obj_gain, 
                 for k in range(detections.shape[2]):
                     batch_obj_detection_without_obj_loss += no_obj_gain * torch.nn.functional.mse_loss(detections[i,j,k,4], zero)
         
-        # batch_obj_detection_without_obj_loss = batch_obj_detection_without_obj_loss / (detections.shape[0]*detections.shape[1]*detections.shape[2])
+        batch_obj_detection_without_obj_loss = batch_obj_detection_without_obj_loss / (detections.shape[0]*detections.shape[1]*detections.shape[2])
     
     
     return batch_position_loss, batch_classification_loss, batch_obj_detection_with_obj_loss + batch_obj_detection_without_obj_loss
