@@ -82,7 +82,7 @@ for b in range(output.shape[0]):
     classes.append(cl)
     prob.append(output[b,4])
 
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.4, 0.4)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.2, 0.4)
 end = time.time()
 
 

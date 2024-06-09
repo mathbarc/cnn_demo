@@ -128,7 +128,7 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
     best_map = 0
 
-    mlflow.set_tracking_uri("https://mlflow.solv.tec.br/")
+    mlflow.set_tracking_uri("https://mlflow.cluster.local/")
     experiment = mlflow.get_experiment_by_name("Object Detection")
     if experiment is None:
         experiment_id = mlflow.create_experiment("Object Detection")
