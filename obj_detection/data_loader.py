@@ -52,10 +52,12 @@ class CocoDataset(Dataset):
         if not os.path.exists(img_path):
             self._coco.download(self.image_folder, [img_id])
         
-        img = read_image(img_path)
+        img = read_image(img_path).float()
         
         if(img.shape[0] == 1):
             img = grayscale_to_rgb(img)
+        
+        img = img*(1./255.)
         
         list_coco_ann = self._coco.getAnnIds(img_id)
         coco_ann = self._coco.loadAnns(list_coco_ann)
@@ -122,27 +124,21 @@ class ObjDetectionDataLoader:
             annotations = []
 
             inputData, ann = self.objDetectionDataset[self.order[start]]
-            inputData = self.iteration_transform(inputData)
-
-            inputData = ObjDetectionDataLoader._grayscale_to_rgb(inputData)
+            inputData = self.iteration_transform(inputData).unsqueeze(dim=0)
 
             annotations.append(ann)
             
 
             for i in range(start+1, end):
                 tmpIn, tmpAnn = self.objDetectionDataset[self.order[i]]
-                tmpIn = self.iteration_transform(tmpIn)
-
-                tmpIn = ObjDetectionDataLoader._grayscale_to_rgb(tmpIn)
+                tmpIn = self.iteration_transform(tmpIn).unsqueeze(dim=0)
                 
                 inputData = torch.cat((inputData, tmpIn))
                 annotations.append(tmpAnn)
             
             self.position = end
 
-            inputData = inputData*(1./255.)
-
-            return inputData.float(), annotations
+            return inputData, annotations
 
     def __len__(self):
         return int(len(self.objDetectionDataset)/self.batch_size)

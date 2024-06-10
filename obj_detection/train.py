@@ -128,7 +128,7 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
     best_map = 0
 
-    mlflow.set_tracking_uri("https://mlflow.cluster.local/")
+    mlflow.set_tracking_uri("http://mlflow.cluster.local/")
     experiment = mlflow.get_experiment_by_name("Object Detection")
     if experiment is None:
         experiment_id = mlflow.create_experiment("Object Detection")
@@ -250,7 +250,7 @@ if __name__ == "__main__":
     cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434]])
 
-    train(dataloader, validation_dataset, cnn, 1e-5,100, gradient_clip=None, lr_ramp_down=100, obj_loss_gain=1., no_obj_loss_gain=.5, classification_loss_gain=1., coordinates_loss_gain=1.)
+    train(dataloader, validation_dataset, cnn, 1e-5,100, gradient_clip=None, lr_ramp_down=1000, obj_loss_gain=1., no_obj_loss_gain=.5, classification_loss_gain=1., coordinates_loss_gain=1.)
 
 
 
