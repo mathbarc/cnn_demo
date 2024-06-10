@@ -13,7 +13,9 @@ class YoloOutput(torch.nn.Module):
         output_layer_channels = (5+n_classes)*len(anchors)        
         self.conv = torch.nn.Conv2d(n_input_activation_maps, output_layer_channels, (1, 1), (1, 1))
         self.n_classes = torch.tensor(n_classes, requires_grad=False)
-        self.anchors = torch.tensor(anchors, requires_grad=False)
+        
+        anchors_data = torch.tensor(anchors, dtype=torch.float32)
+        self.anchors = torch.nn.Parameter(anchors_data.reshape((anchors_data.size(0),anchors_data.size(1), 1, 1)), requires_grad=True)
         
 
     def forward(self, features: torch.Tensor):
@@ -28,7 +30,7 @@ class YoloOutput(torch.nn.Module):
             grid_dimensions = [grid.size(0),self.anchors.size(0), (5+self.n_classes), grid.size(2), grid.size(3)]
         
         grid = grid.reshape(grid_dimensions).to(features.device)
-        anchors_tiled = self.anchors.reshape((self.anchors.size(0),self.anchors.size(1), 1, 1)).to(features.device)
+        anchors_tiled = self.anchors.to(features.device)
         
         x = ((grid_cell_position_x + torch.sigmoid(grid[:,:,0]))/grid.size(4)).unsqueeze(2)
         y = ((grid_cell_position_y + torch.sigmoid(grid[:,:,1]))/grid.size(3)).unsqueeze(2)

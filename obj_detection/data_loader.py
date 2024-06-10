@@ -145,16 +145,29 @@ class ObjDetectionDataLoader:
 
 if __name__=="__main__":
     dataset = CocoDataset("/data/hd1/Dataset/Coco/val2017","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
-    dataloader = ObjDetectionDataLoader(dataset, 8, 368, 512)
+    dataloader = ObjDetectionDataLoader(dataset, 1, 368, 512)
     
     print(dataset.get_categories_count())
     device = torch.device("cuda")
     
+    import cv2
+    
     for img, ann in dataloader:
-        img = img.to(device)
-        if img.dtype != torch.float:
-            print(type(img))
-        if img.max() > 1:
-            print(img.max())
-
+        img = img.squeeze()
+        img = img.permute(1,2,0).numpy()
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        
+        boxes = ann[0]["boxes"]
+        
+        for box in boxes:
+            x = int((box[0] - box[2]*0.5)*img.shape[1])
+            y = int((box[1] - box[3]*0.5)*img.shape[0])
+            w = int(box[2]*img.shape[1])
+            h = int(box[3]*img.shape[0])
+            
+            img = cv2.rectangle(img, rec = [x,y,w,h], color=(0,255,0))
+        
+        cv2.imshow("img", img)
+        if cv2.waitKey() == 27:
+            break
     ...    

@@ -157,7 +157,7 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
         cnn.train()
 
         for imgs, anns in tqdm(dataloader, total=len(dataloader)):
-            optimizer.zero_grad()
+            
             
             imgs = imgs.to(device)
 
@@ -183,14 +183,12 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
                 torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
                 
             optimizer.step()
-                
             scheduler.step()
+            optimizer.zero_grad()
                         
             if batch_counter % 100 == 99:
                 cnn.save_model("last", device=device)
                 
-            
-            
             batch_counter+=1
             
             metrics = {
@@ -247,8 +245,9 @@ if __name__ == "__main__":
     
     dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
 
-    cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
-    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434]])
+    cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.02,0.03],[0.05,0.06],[0.09,0.14],[0.19,0.2],[0.32,0.4],[0.83,0.77]])
+    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
+    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
     train(dataloader, validation_dataset, cnn, 1e-5,100, gradient_clip=None, lr_ramp_down=1000, obj_loss_gain=1., no_obj_loss_gain=.5, classification_loss_gain=1., coordinates_loss_gain=1.)
 

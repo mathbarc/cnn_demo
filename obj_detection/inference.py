@@ -68,13 +68,10 @@ output = numpy.reshape(output,(output.shape[0]*output.shape[1]*output.shape[2]*o
 for b in range(output.shape[0]):
     
     box = output[b,:4].copy()
-    box[0] = box[0] * img.shape[1]
-    box[1] = box[1] * img.shape[0]
+    box[0] = (box[0] - box[2]*0.5) * img.shape[1]
+    box[1] = (box[1] - box[3]*0.5) * img.shape[0]
     box[2] = box[2] * img.shape[1]
     box[3] = box[3] * img.shape[0]
-
-    box[0] = box[0] - (box[2]/2)
-    box[1] = box[1] - (box[3]/2)
 
     boxes.append(box.astype(int))
 
@@ -82,7 +79,7 @@ for b in range(output.shape[0]):
     classes.append(cl)
     prob.append(output[b,4])
 
-indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.05, 0.4)
+indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.1, 0.4)
 end = time.time()
 
 
@@ -104,7 +101,12 @@ for box_id in indexes:
         (255, 0, 0),
         2,
     )
-    print(boxes[box_id])
+    orig_box = output[box_id,:4].copy()
+    orig_box[0] *= img.shape[1]
+    orig_box[1] *= img.shape[0]
+    orig_box[2] *= img.shape[1]
+    orig_box[3] *= img.shape[0]
+    print(boxes[box_id], "->", orig_box)
     print(box_classes, "->", label)
     print(prob[box_id])
 
