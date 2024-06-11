@@ -34,8 +34,8 @@ class YoloOutput(torch.nn.Module):
         
         x = ((grid_cell_position_x + torch.sigmoid(grid[:,:,0]))/grid.size(4)).unsqueeze(2)
         y = ((grid_cell_position_y + torch.sigmoid(grid[:,:,1]))/grid.size(3)).unsqueeze(2)
-        w = ((anchors_tiled[:,0] * torch.exp(grid[:,:,2]))/grid.size(4)).unsqueeze(2)
-        h = ((anchors_tiled[:,1] * torch.exp(grid[:,:,3]))/grid.size(3)).unsqueeze(2)
+        w = (anchors_tiled[:,0] * torch.exp(grid[:,:,2])).unsqueeze(2)
+        h = (anchors_tiled[:,1] * torch.exp(grid[:,:,3])).unsqueeze(2)
         
         obj = torch.sigmoid(grid[:,:,4]).unsqueeze(2)
         classes = torch.sigmoid(grid[:,:,5:])
@@ -194,7 +194,6 @@ def calc_obj_detection_loss(
     n_batches = detections.size()[0]
 
     position_loss = 0
-    scale_loss = 0
     classification_loss = 0
     obj_detection_loss = 0
     
@@ -224,6 +223,8 @@ def calc_obj_detection_loss(
             position_loss += batch_position_loss
             classification_loss += batch_classification_loss
             obj_detection_loss += batch_obj_detection_loss
+
+
 
     return (
         (coordinates_gain * position_loss)/n_batches,
