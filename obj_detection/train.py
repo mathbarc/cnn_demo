@@ -218,7 +218,7 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
         if best_map < performance_metrics:
             best_map = performance_metrics
-            cnn.save_model("obj_detection_best")
+            cnn.save_model("obj_detection_best",device=device)
         
         cnn.save_model(f"obj_detection_last",device=device)
         
@@ -238,11 +238,11 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
-    dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/train2017","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
-    validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/val2017","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
+    # dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/train2017","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
+    # validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/val2017","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
     
-    # dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Train.json")
-    # validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Test.json")
+    dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Train.json")
+    validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Test.json")
     
     dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
 
@@ -250,7 +250,7 @@ if __name__ == "__main__":
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
-    train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=None, lr_ramp_down=1000, obj_loss_gain=1., no_obj_loss_gain=.5, classification_loss_gain=1., coordinates_loss_gain=1.)
+    train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=None, lr_ramp_down=1000, obj_loss_gain=1., no_obj_loss_gain=1., classification_loss_gain=1., coordinates_loss_gain=1.)
 
 
 
