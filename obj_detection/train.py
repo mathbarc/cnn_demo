@@ -14,6 +14,37 @@ import mlflow
 
 
 class ObjDetectionLR:
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_overshoot:float, overshoot_period:int):
+        self._optimizer = optimizer
+        
+        self._lr_base = lr_base
+        self._lr_overshoot = lr_overshoot
+        
+        self._current_step = 0
+        self._overshoot_period = overshoot_period
+        
+        self._overshoot_amplitude = self._lr_overshoot - self._lr_base
+    
+    def step(self):
+        
+        lr = self.get_last_lr()
+            
+        for param_group in self._optimizer.param_groups:
+            param_group['lr'] = lr
+        
+        self._current_step+=1
+            
+    def get_last_lr(self):
+        
+        if self._current_step >= self._overshoot_period:
+            lr = self._lr_base
+            
+        elif self._current_step < self._overshoot_period:
+            lr = self._lr_base + self._overshoot_amplitude * math.sin((math.pi)*(self._current_step/self._overshoot_period))
+        
+        return lr
+
+class ObjDetectionDecayLR:
     def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_overshoot:float, lr_final:float, n_steps:int, overshoot_period:int):
         self._optimizer = optimizer
         
@@ -49,6 +80,44 @@ class ObjDetectionLR:
         
         return lr
 
+class ObjDetectionCosineAnnealingLR:
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_overshoot:float, lr_final:float, overshoot_period:int, cosine_period:int, cosine_period_inc:float):
+        self._optimizer = optimizer
+        
+        self._lr_base = lr_base
+        self._lr_overshoot = lr_overshoot
+
+        self._current_step = 0
+        self._overshoot_period = overshoot_period
+    
+        self._cosine_period = cosine_period
+        self._cosine_period_inc = cosine_period_inc
+        
+        self._overshoot_amplitude = self._lr_overshoot - self._lr_base
+        self._decay_amplitude = lr_final - self._lr_base
+    
+    def step(self):
+        
+        lr = self.get_last_lr()
+            
+        for param_group in self._optimizer.param_groups:
+            param_group['lr'] = lr
+        
+        self._current_step+=1
+            
+    def get_last_lr(self):
+        
+        if self._current_step >= self._overshoot_period:
+            pos_in_interval = (self._current_step-self._overshoot_period)%self._cosine_period
+            lr = self._lr_base + self._decay_amplitude * math.sin((math.pi/2)*(pos_in_interval/self._cosine_period))
+                
+            
+        elif self._current_step < self._overshoot_period:
+            lr = self._lr_base + self._overshoot_amplitude * math.sin((math.pi)*(self._current_step/self._overshoot_period))
+        
+        
+        
+        return lr
 
 
 def calculate_metrics(
@@ -115,10 +184,11 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
     cnn = cnn.to(device)
 
-    optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
-    # optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
+    # optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
+    optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
     
-    scheduler = ObjDetectionLR(optimizer, lr, 0.01, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
+    # scheduler = ObjDetectionDecayLR(optimizer, lr, 0.01, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
+    scheduler = ObjDetectionCosineAnnealingLR(optimizer, lr, 0.01, 1e-8, lr_ramp_down, 1000, 2)
     
     if dataloader.objDetectionDataset.get_categories_count()>1:
         class_loss = torch.nn.functional.binary_cross_entropy
