@@ -40,8 +40,8 @@ class ObjDetectionLR:
             lr = self._lr_base
             
         elif self._current_step < self._overshoot_period:
-            lr = self._lr_base + self._overshoot_amplitude * math.sin((math.pi)*(self._current_step/self._overshoot_period))
-        
+            lr = self._lr_base + self._overshoot_amplitude * math.sin((math.pi)*(self._current_step/(self._overshoot_period)))
+            
         return lr
 
 class ObjDetectionDecayLR:
@@ -184,11 +184,12 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
     cnn = cnn.to(device)
 
-    # optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
-    optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
+    optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
+    # optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
     
+    scheduler = ObjDetectionLR(optimizer, lr, 0.01, lr_ramp_down)
     # scheduler = ObjDetectionDecayLR(optimizer, lr, 0.01, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
-    scheduler = ObjDetectionCosineAnnealingLR(optimizer, lr, 0.01, 1e-8, lr_ramp_down, 1000, 2)
+    # scheduler = ObjDetectionCosineAnnealingLR(optimizer, lr, 0.01, 1e-8, lr_ramp_down, 1000, 2)
     
     if dataloader.objDetectionDataset.get_categories_count()>1:
         class_loss = torch.nn.functional.binary_cross_entropy
@@ -248,7 +249,8 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
             )
 
             total_loss = position_loss + obj_detection_loss + classification_loss
-            total_loss.backward()
+            loss = total_loss/dataloader.batch_size
+            loss.backward()
             
             if gradient_clip is not None:    
                 torch.nn.utils.clip_grad_norm_(cnn.parameters(), gradient_clip)
@@ -320,7 +322,7 @@ if __name__ == "__main__":
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
-    train(dataloader, validation_dataset, cnn, 1e-3,1000, gradient_clip=None, lr_ramp_down=100, obj_loss_gain=1., no_obj_loss_gain=.5, classification_loss_gain=1., coordinates_loss_gain=1.)
+    train(dataloader, validation_dataset, cnn, 1e-4,100, gradient_clip=None, lr_ramp_down=1000, obj_loss_gain=1., no_obj_loss_gain=.05, classification_loss_gain=1., coordinates_loss_gain=1.)
 
 
 

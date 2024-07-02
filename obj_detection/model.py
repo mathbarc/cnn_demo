@@ -22,6 +22,7 @@ class YoloOutput(torch.nn.Module):
         # Grid format -> B,C,H,W
 
         grid = self.conv(features)
+        # grid = torch.nan_to_num(grid)
         
         with torch.no_grad():
             grid_cell_position_y, grid_cell_position_x = torch.meshgrid([torch.arange(grid.size(2)), torch.arange(grid.size(3))], indexing='ij')
@@ -121,10 +122,10 @@ class YoloV2(torch.nn.Module):
 
 
 def calc_batch_loss(detections:torch.Tensor, annotations, class_loss, obj_gain, no_obj_gain):
-    batch_position_loss = 0
-    batch_classification_loss = 0
-    batch_with_obj_detection_loss = 0
-    batch_without_obj_detection_loss = 0
+    batch_position_loss = torch.zeros([1], device=detections.device,requires_grad=False)
+    batch_classification_loss = torch.zeros([1], device=detections.device,requires_grad=False)
+    batch_with_obj_detection_loss = torch.zeros([1], device=detections.device,requires_grad=False)
+    batch_without_obj_detection_loss = torch.zeros([1], device=detections.device,requires_grad=False)
     
     obj_boxes = detections[:,:,:,0:4]
     obj_boxes_xyxy = torchvision.ops.box_convert(obj_boxes, "cxcywh", "xyxy")
@@ -153,6 +154,8 @@ def calc_batch_loss(detections:torch.Tensor, annotations, class_loss, obj_gain, 
             rank_iou.sort(key=lambda x: x[1],reverse=True)
             
             for best_iou_id in rank_iou:
+                if best_iou_id[1] < 0.2:
+                    break
                 p = (best_iou_id[0], cellY, cellX) 
                 if p not in contains_obj:
                     contains_obj[p] = (i,iou[best_iou_id[0]])
@@ -201,6 +204,8 @@ def calc_obj_detection_loss(
     parallel: bool = False
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     n_batches = detections.size()[0]
+    
+    detections = torch.nan_to_num(detections,0,0,0)
 
     position_loss = 0
     classification_loss = 0
