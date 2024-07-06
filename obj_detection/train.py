@@ -13,6 +13,36 @@ import model
 import mlflow
 
 
+class ObjDetectionRampUpLR:
+    def __init__(self, optimizer:torch.optim.Optimizer, lr:float, rampup_period:int, power:int = 4):
+        self._optimizer = optimizer
+        
+        self._lr_base = lr
+        self._current_step = 0
+        
+        self._rampup_period = rampup_period
+        self._power = power
+    
+    def step(self):
+        
+        lr = self.get_last_lr()
+            
+        for param_group in self._optimizer.param_groups:
+            param_group['lr'] = lr
+        
+        self._current_step+=1
+            
+    def get_last_lr(self):
+        
+        if self._current_step >= self._rampup_period:
+            lr = self._lr_base
+            
+        elif self._current_step < self._rampup_period:
+            lr = self._lr_base * pow((self._current_step / self._rampup_period), self._power)
+            
+        return lr
+
+
 class ObjDetectionLR:
     def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_overshoot:float, overshoot_period:int):
         self._optimizer = optimizer
@@ -43,9 +73,9 @@ class ObjDetectionLR:
             lr = self._lr_base + self._overshoot_amplitude * math.sin((math.pi)*(self._current_step/(self._overshoot_period)))
             
         return lr
-
+    
 class ObjDetectionDecayLR:
-    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_overshoot:float, lr_final:float, n_steps:int, overshoot_period:int):
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_overshoot:float, lr_final:float, n_steps:int, overshoot_period:int, power:int=4):
         self._optimizer = optimizer
         
         self._lr_base = lr_base
@@ -53,11 +83,12 @@ class ObjDetectionDecayLR:
         
         self._n_steps = n_steps
         self._current_step = 0
-        self._overshoot_period = overshoot_period
+        self._rampup_period = overshoot_period
         self._decay_period = n_steps-overshoot_period
         
         self._overshoot_amplitude = self._lr_overshoot - self._lr_base
         self._decay_amplitude = lr_final - self._lr_base
+        self._power = power
     
     def step(self):
         
@@ -70,11 +101,11 @@ class ObjDetectionDecayLR:
             
     def get_last_lr(self):
         
-        if self._current_step >= self._overshoot_period:
-            lr = self._lr_base + self._decay_amplitude * math.sin((math.pi/2)*((self._current_step-self._overshoot_period)/self._decay_period))
+        if self._current_step >= self._rampup_period:
+            lr = self._lr_base + self._decay_amplitude * math.sin((math.pi/2)*((self._current_step-self._rampup_period)/self._decay_period))
             
-        elif self._current_step < self._overshoot_period:
-            lr = self._lr_base + self._overshoot_amplitude * math.sin((math.pi)*(self._current_step/self._overshoot_period))
+        elif self._current_step < self._rampup_period:
+            lr = self._lr_base * pow((self._current_step / self._rampup_period), self._power)
         
         
         
@@ -184,11 +215,12 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
     cnn = cnn.to(device)
 
-    optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
-    # optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
+    # optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
+    optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
     
-    scheduler = ObjDetectionLR(optimizer, lr, 0.01, lr_ramp_down)
-    # scheduler = ObjDetectionDecayLR(optimizer, lr, 0.01, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
+    # scheduler = ObjDetectionRampUpLR(optimizer, lr, lr_ramp_down)
+    # scheduler = ObjDetectionLR(optimizer, lr, 0.01, lr_ramp_down)
+    scheduler = ObjDetectionDecayLR(optimizer, lr, 0.01, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
     # scheduler = ObjDetectionCosineAnnealingLR(optimizer, lr, 0.01, 1e-8, lr_ramp_down, 1000, 2)
     
     if dataloader.objDetectionDataset.get_categories_count()>1:
@@ -322,7 +354,7 @@ if __name__ == "__main__":
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
-    train(dataloader, validation_dataset, cnn, 1e-4,100, gradient_clip=None, lr_ramp_down=1000, obj_loss_gain=1., no_obj_loss_gain=.05, classification_loss_gain=1., coordinates_loss_gain=1.)
+    train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=None, lr_ramp_down=1000, obj_loss_gain=1., no_obj_loss_gain=.05, classification_loss_gain=1., coordinates_loss_gain=1.)
 
 
 
