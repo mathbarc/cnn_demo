@@ -88,6 +88,7 @@ class ObjDetectionDecayLR:
         
         self._overshoot_amplitude = self._lr_overshoot - self._lr_base
         self._decay_amplitude = lr_final - self._lr_base
+        self._lr_final = lr_final
         self._power = power
     
     def step(self):
@@ -102,7 +103,8 @@ class ObjDetectionDecayLR:
     def get_last_lr(self):
         
         if self._current_step >= self._rampup_period:
-            lr = self._lr_base + self._decay_amplitude * math.sin((math.pi/2)*((self._current_step-self._rampup_period)/self._decay_period))
+            # lr = self._lr_base + self._decay_amplitude * math.sin((math.pi/2)*((self._current_step-self._rampup_period)/self._decay_period))
+            lr = self._lr_final + self._decay_amplitude * pow(((self._decay_period-(self._current_step-self._rampup_period)) / self._decay_period), self._power)
             
         elif self._current_step < self._rampup_period:
             lr = self._lr_base * pow((self._current_step / self._rampup_period), self._power)
