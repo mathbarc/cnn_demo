@@ -7,8 +7,8 @@ import torchvision.transforms.functional
 from tqdm import tqdm
 import math
 
-import data_loader
-import model
+from . import data_loader
+from . import model
 
 import mlflow
 
@@ -74,20 +74,17 @@ class ObjDetectionLR:
             
         return lr
     
-class ObjDetectionDecayLR:
-    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_overshoot:float, lr_final:float, n_steps:int, overshoot_period:int, power:int=4):
+class ObjDetectionExponentialDecayLR:
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, n_steps:int, rampup_period:int, power:int=4):
         self._optimizer = optimizer
         
         self._lr_base = lr_base
-        self._lr_overshoot = lr_overshoot
         
-        self._n_steps = n_steps
         self._current_step = 0
-        self._rampup_period = overshoot_period
-        self._decay_period = n_steps-overshoot_period
+        self._rampup_period = rampup_period
+        self._decay_period = n_steps-rampup_period
         
-        self._overshoot_amplitude = self._lr_overshoot - self._lr_base
-        self._decay_amplitude = lr_final - self._lr_base
+        self._decay_amplitude = self._lr_base - lr_final
         self._lr_final = lr_final
         self._power = power
     
@@ -102,32 +99,27 @@ class ObjDetectionDecayLR:
             
     def get_last_lr(self):
         
-        if self._current_step >= self._rampup_period:
-            # lr = self._lr_base + self._decay_amplitude * math.sin((math.pi/2)*((self._current_step-self._rampup_period)/self._decay_period))
+        if self._current_step > self._rampup_period:
             lr = self._lr_final + self._decay_amplitude * pow(((self._decay_period-(self._current_step-self._rampup_period)) / self._decay_period), self._power)
             
-        elif self._current_step < self._rampup_period:
+        elif self._current_step <= self._rampup_period:
             lr = self._lr_base * pow((self._current_step / self._rampup_period), self._power)
         
-        
-        
         return lr
-
-class ObjDetectionCosineAnnealingLR:
-    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_overshoot:float, lr_final:float, overshoot_period:int, cosine_period:int, cosine_period_inc:float):
+    
+class ObjDetectionCosineDecayLR:
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, n_steps:int, rampup_period:int, power:int=4):
         self._optimizer = optimizer
         
         self._lr_base = lr_base
-        self._lr_overshoot = lr_overshoot
-
-        self._current_step = 0
-        self._overshoot_period = overshoot_period
-    
-        self._cosine_period = cosine_period
-        self._cosine_period_inc = cosine_period_inc
         
-        self._overshoot_amplitude = self._lr_overshoot - self._lr_base
-        self._decay_amplitude = lr_final - self._lr_base
+        self._current_step = 0
+        self._rampup_period = rampup_period
+        self._decay_period = n_steps-rampup_period
+        
+        self._decay_amplitude = self._lr_base - lr_final
+        self._lr_final = lr_final
+        self._power = power
     
     def step(self):
         
@@ -140,16 +132,92 @@ class ObjDetectionCosineAnnealingLR:
             
     def get_last_lr(self):
         
-        if self._current_step >= self._overshoot_period:
-            pos_in_interval = (self._current_step-self._overshoot_period)%self._cosine_period
-            lr = self._lr_base + self._decay_amplitude * math.sin((math.pi/2)*(pos_in_interval/self._cosine_period))
-                
+        if self._current_step > self._rampup_period:
+            lr = self._lr_final + self._decay_amplitude * math.sin((math.pi/2)*((self._current_step-self._rampup_period)/self._decay_period)+(math.pi/2))
             
-        elif self._current_step < self._overshoot_period:
-            lr = self._lr_base + self._overshoot_amplitude * math.sin((math.pi)*(self._current_step/self._overshoot_period))
+        elif self._current_step <= self._rampup_period:
+            lr = self._lr_base * pow((self._current_step / self._rampup_period), self._power)
         
+        return lr
+
+class ObjDetectionLogisticDecayLR:
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, n_steps:int, rampup_period:int, power:int=4):
+        self._optimizer = optimizer
         
+        self._lr_base = lr_base
         
+        self._current_step = 0
+        self._rampup_period = rampup_period
+        self._decay_period = n_steps-rampup_period
+        
+        self._decay_amplitude = self._lr_base - lr_final
+        self._lr_final = lr_final
+        self._power = power
+    
+    def step(self):
+        
+        lr = self.get_last_lr()
+            
+        for param_group in self._optimizer.param_groups:
+            param_group['lr'] = lr
+        
+        self._current_step+=1
+         
+    @staticmethod
+    def _sigmoid(x):
+        return 1/(1+(math.exp(-x)))        
+    
+    def get_last_lr(self):
+        
+        if self._current_step >= self._rampup_period-1:
+            expoent = ((self._decay_period-(self._current_step-self._rampup_period))/self._decay_period)*12 - 7
+            lr = self._lr_final + self._decay_amplitude*self._sigmoid(expoent)
+            
+        elif self._current_step < self._rampup_period-1:
+            lr = self._lr_base * pow((self._current_step / self._rampup_period), self._power)
+        
+        return lr
+
+class ObjDetectionCosineAnnealingLR:
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, rampup_period:int, cosine_period:int, cosine_period_inc:float, power:int=4):
+        self._optimizer = optimizer
+        
+        self._lr_base = lr_base
+
+        self._current_step = 0
+        self._rampup_period = rampup_period
+    
+        self._cosine_period = cosine_period
+        self._cosine_period_inc = cosine_period_inc
+        
+        self._decay_amplitude = self._lr_base - lr_final
+        self._lr_final = lr_final
+        
+        self._cosine_interval_start = self._rampup_period
+        self._power = power
+    
+    def step(self):
+        
+        lr = self.get_last_lr()
+            
+        for param_group in self._optimizer.param_groups:
+            param_group['lr'] = lr
+        
+        self._current_step+=1
+            
+    def get_last_lr(self):
+        
+        if self._current_step >= self._rampup_period:
+            pos_in_interval = (self._current_step-self._cosine_interval_start)
+            lr = self._lr_final + self._decay_amplitude * ((math.cos((math.pi/2)*(pos_in_interval/self._cosine_period))))
+            if pos_in_interval == self._cosine_period:
+                self._cosine_interval_start = self._current_step
+                self._cosine_period *= self._cosine_period_inc
+                            
+        elif self._current_step < self._rampup_period:
+            lr = self._lr_base * pow((self._current_step / self._rampup_period), self._power)
+        
+
         return lr
 
 
@@ -222,7 +290,9 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
     
     # scheduler = ObjDetectionRampUpLR(optimizer, lr, lr_ramp_down)
     # scheduler = ObjDetectionLR(optimizer, lr, 0.01, lr_ramp_down)
-    scheduler = ObjDetectionDecayLR(optimizer, lr, 0.01, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
+    scheduler = ObjDetectionCosineDecayLR(optimizer, lr, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
+    # scheduler = ObjDetectionExponentialDecayLR(optimizer, lr, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
+    # scheduler = ObjDetectionLogisticLR(optimizer, lr, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
     # scheduler = ObjDetectionCosineAnnealingLR(optimizer, lr, 0.01, 1e-8, lr_ramp_down, 1000, 2)
     
     if dataloader.objDetectionDataset.get_categories_count()>1:
@@ -295,18 +365,20 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
                         
             if batch_counter % 100 == 99:
                 cnn.save_model("last", device=device)
-                
+
+            if batch_counter%30 == 0:
+            
+                metrics = {
+                    "total_loss": total_loss.item(),
+                    "position_loss": position_loss.item(),
+                    "class_loss": classification_loss.item(),
+                    "object_presence_loss": obj_detection_loss.item(), 
+                  "lr": optimizer.param_groups[0]["lr"]  
+                 }
+            
+                mlflow.log_metrics(metrics, batch_counter)
+            
             batch_counter+=1
-            
-            metrics = {
-                "total_loss": total_loss.item(),
-                "position_loss": position_loss.item(),
-                "class_loss": classification_loss.item(),
-                "object_presence_loss": obj_detection_loss.item(), 
-                "lr": optimizer.param_groups[0]["lr"]  
-            }
-            
-            mlflow.log_metrics(metrics, batch_counter)
 
         
         cnn.eval()
@@ -333,31 +405,3 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
         ...
 
 
-
-
-if __name__ == "__main__":
-    
-    
-
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
-
-    # dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/train2017","/data/hd1/Dataset/Coco/annotations/instances_train2017.json")
-    # validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/Coco/val2017","/data/hd1/Dataset/Coco/annotations/instances_val2017.json")
-    
-    dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Train.json")
-    validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Test.json")
-    
-    dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
-
-    cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.02,0.03],[0.05,0.06],[0.09,0.14],[0.19,0.2],[0.32,0.4],[0.83,0.77]])
-    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
-    # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
-
-    train(dataloader, validation_dataset, cnn, 1e-3,100, gradient_clip=None, lr_ramp_down=1000, obj_loss_gain=1., no_obj_loss_gain=.05, classification_loss_gain=1., coordinates_loss_gain=1.)
-
-
-
-    ...
