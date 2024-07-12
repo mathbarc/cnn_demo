@@ -37,7 +37,7 @@ class ObjDetectionRampUpLR:
         if self._current_step >= self._rampup_period:
             lr = self._lr_base
             
-        elif self._current_step < self._rampup_period:
+        elif self._current_step <= self._rampup_period:
             lr = self._lr_base * pow((self._current_step / self._rampup_period), self._power)
             
         return lr
@@ -272,28 +272,20 @@ def calculate_metrics(
 def train(  dataloader : data_loader.ObjDetectionDataLoader, 
             validation_dataset : data_loader.CocoDataset,
             cnn : model.YoloV2, 
+            optimizer,
+            scheduler,
             lr : float = 0.001,
             epochs : int = 1000, 
-            gradient_clip: float | None = None,
-            device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-            coordinates_loss_gain: float = 1.,
-            classification_loss_gain: float = 1.,
             obj_loss_gain: float = 5.,
             no_obj_loss_gain: float = .5,
-            lr_ramp_down:int = 100
+            coordinates_loss_gain: float = 1.,
+            classification_loss_gain: float = 1.,
+            lr_rampup_period:int = 100,
+            gradient_clip: float | None = None,
+            device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         ):
 
     cnn = cnn.to(device)
-
-    # optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
-    optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
-    
-    # scheduler = ObjDetectionRampUpLR(optimizer, lr, lr_ramp_down)
-    # scheduler = ObjDetectionLR(optimizer, lr, 0.01, lr_ramp_down)
-    scheduler = ObjDetectionCosineDecayLR(optimizer, lr, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
-    # scheduler = ObjDetectionExponentialDecayLR(optimizer, lr, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
-    # scheduler = ObjDetectionLogisticLR(optimizer, lr, 1e-8, (epochs*len(dataloader)), lr_ramp_down)
-    # scheduler = ObjDetectionCosineAnnealingLR(optimizer, lr, 0.01, 1e-8, lr_ramp_down, 1000, 2)
     
     if dataloader.objDetectionDataset.get_categories_count()>1:
         class_loss = torch.nn.functional.binary_cross_entropy
@@ -313,6 +305,7 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
 
     training_params = {
         "opt": str(optimizer),
+        "scheduler": str(scheduler),
         "batch_size": dataloader.batch_size,
         "lr": lr,
         "epoch": epochs,
@@ -321,7 +314,8 @@ def train(  dataloader : data_loader.ObjDetectionDataLoader,
         "obj_loss_gain": obj_loss_gain,
         "no_obj_loss_gain": no_obj_loss_gain,
         "gradient_clip": gradient_clip,
-        "lr_ramp_down": lr_ramp_down,
+        "lr_rampup_period": lr_rampup_period,
+        "n_anchors": cnn.output.anchors.shape[0]
     }
     
     mlflow.log_params(training_params)

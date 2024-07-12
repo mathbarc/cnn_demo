@@ -20,7 +20,8 @@ def softmax(data):
 
 
 if __name__ == "__main__":
-    net = cv2.dnn.readNetFromONNX("obj_detection_best.onnx")
+    net = cv2.dnn.readNetFromONNX("obj_detection_sigmoid.onnx")
+    # net = cv2.dnn.readNetFromONNX("obj_detection_best.onnx")
     # net = cv2.dnn.readNetFromONNX("last.onnx")
     # net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
     # net = cv2.dnn.readNetFromTorch("obj_det.pt")
