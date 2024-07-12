@@ -154,7 +154,7 @@ def calc_batch_loss(detections:torch.Tensor, annotations, class_loss, obj_gain, 
             rank_iou.sort(key=lambda x: x[1],reverse=True)
             
             for best_iou_id in rank_iou:
-                if best_iou_id[1] < 0.2:
+                if best_iou_id[1] < 0.25:
                     break
                 p = (best_iou_id[0], cellY, cellX) 
                 if p not in contains_obj:

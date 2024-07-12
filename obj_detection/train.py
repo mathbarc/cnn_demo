@@ -228,7 +228,7 @@ def calculate_metrics(
 ):
     cnn.eval()
 
-    metrics_calculator = torchmetrics.detection.MeanAveragePrecision(box_format="cxcywh",iou_thresholds=[0.5], rec_thresholds=[0.4],class_metrics=True).to(device=device)
+    metrics_calculator = torchmetrics.detection.MeanAveragePrecision(box_format="cxcywh",iou_thresholds=[0.5], rec_thresholds=[0.25],class_metrics=True).to(device=device)
     
     with torch.no_grad():
         for img, ann in tqdm(dataset):
