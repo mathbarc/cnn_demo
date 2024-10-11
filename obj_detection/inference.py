@@ -20,17 +20,17 @@ def softmax(data):
 
 
 if __name__ == "__main__":
-    net = cv2.dnn.readNetFromONNX("obj_detection_sigmoid.onnx")
+    net = cv2.dnn.readNetFromONNX("yolo11n.onnx")
     # net = cv2.dnn.readNetFromONNX("obj_detection_best.onnx")
     # net = cv2.dnn.readNetFromONNX("last.onnx")
     # net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
     # net = cv2.dnn.readNetFromTorch("obj_det.pt")
     # net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")
 
-    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
-    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
-    flops = net.getFLOPS((1, 3, 416, 416)) * 10e-9
+    flops = net.getFLOPS((1, 3, 640, 640)) * 10e-9
     print(round(flops, 3), "BFLOPs")
 
     # input_test = numpy.ones((1, 3, 416, 416))*0.5
@@ -54,12 +54,15 @@ if __name__ == "__main__":
     # ...
 
     # img = cv2.imread("/data/hd1/Dataset/Coco/images/000000391895.jpg")
-    # labels_str = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" ]
+    labels_str = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" ]
 
-    folder = "/data/hd1/Dataset/leafs/images/"
+    # folder = "/data/hd1/Dataset/leafs/images/"
+    folder = "/data/ssd1/Datasets/Coco/test2017/"
     output_folder = "./inference_results"
 
     os.makedirs(output_folder, exist_ok=True)
+    
+    outLayers = net.getUnconnectedOutLayersNames()
 
     count = 0
     mean_infer_time = 0
@@ -71,12 +74,12 @@ if __name__ == "__main__":
         labels_str = ["disease"]
 
         input_img = cv2.dnn.blobFromImage(
-            img, scalefactor=1.0 / 255.0, size=(416, 416), swapRB=True
+            img, scalefactor=1.0 / 255.0, size=(640, 640), swapRB=True
         )
 
         start = time.time()
-        net.setInput(input_img, "features")
-        output = net.forward("output")
+        net.setInput(input_img, "images")
+        output = net.forward(outLayers)
         finished_inference = time.time()
 
         boxes = []
