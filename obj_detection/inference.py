@@ -4,24 +4,26 @@ import time
 import os
 import glob
 
+
 def sigmoid(data):
-    return 1/(1+(numpy.exp(-data)))
+    return 1 / (1 + (numpy.exp(-data)))
+
 
 def silu(data):
     return data * sigmoid(data)
 
+
 def softmax(data):
     exp_data = numpy.exp(data)
-    sums = numpy.sum(exp_data,axis=1)
+    sums = numpy.sum(exp_data, axis=1)
     for i in range(exp_data.shape[0]):
-        exp_data[i,:] = exp_data[i,:]/sums[i]
-    return exp_data 
-
+        exp_data[i, :] = exp_data[i, :] / sums[i]
+    return exp_data
 
 
 if __name__ == "__main__":
-    net = cv2.dnn.readNetFromONNX("yolo11n.onnx")
-    # net = cv2.dnn.readNetFromONNX("obj_detection_best.onnx")
+    # net = cv2.dnn.readNetFromONNX("yolo11n.onnx")
+    net = cv2.dnn.readNetFromONNX("obj_detection_best.onnx")
     # net = cv2.dnn.readNetFromONNX("last.onnx")
     # net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
     # net = cv2.dnn.readNetFromTorch("obj_det.pt")
@@ -37,7 +39,7 @@ if __name__ == "__main__":
 
     # mean = 0
     # for i in range(10):
-        
+
     #     start = time.time()
     #     net.setInput(input_test, "features")
     #     output = net.forward(["output"])
@@ -54,20 +56,101 @@ if __name__ == "__main__":
     # ...
 
     # img = cv2.imread("/data/hd1/Dataset/Coco/images/000000391895.jpg")
-    labels_str = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" ]
+    labels_str = [
+        "person",
+        "bicycle",
+        "car",
+        "motorbike",
+        "aeroplane",
+        "bus",
+        "train",
+        "truck",
+        "boat",
+        "traffic light",
+        "fire hydrant",
+        "stop sign",
+        "parking meter",
+        "bench",
+        "bird",
+        "cat",
+        "dog",
+        "horse",
+        "sheep",
+        "cow",
+        "elephant",
+        "bear",
+        "zebra",
+        "giraffe",
+        "backpack",
+        "umbrella",
+        "handbag",
+        "tie",
+        "suitcase",
+        "frisbee",
+        "skis",
+        "snowboard",
+        "sports ball",
+        "kite",
+        "baseball bat",
+        "baseball glove",
+        "skateboard",
+        "surfboard",
+        "tennis racket",
+        "bottle",
+        "wine glass",
+        "cup",
+        "fork",
+        "knife",
+        "spoon",
+        "bowl",
+        "banana",
+        "apple",
+        "sandwich",
+        "orange",
+        "broccoli",
+        "carrot",
+        "hot dog",
+        "pizza",
+        "donut",
+        "cake",
+        "chair",
+        "sofa",
+        "pottedplant",
+        "bed",
+        "diningtable",
+        "toilet",
+        "tvmonitor",
+        "laptop",
+        "mouse",
+        "remote",
+        "keyboard",
+        "cell phone",
+        "microwave",
+        "oven",
+        "toaster",
+        "sink",
+        "refrigerator",
+        "book",
+        "clock",
+        "vase",
+        "scissors",
+        "teddy bear",
+        "hair drier",
+        "toothbrush",
+    ]
 
     # folder = "/data/hd1/Dataset/leafs/images/"
     folder = "/data/ssd1/Datasets/Coco/test2017/"
     output_folder = "./inference_results"
 
     os.makedirs(output_folder, exist_ok=True)
-    
+
     outLayers = net.getUnconnectedOutLayersNames()
 
     count = 0
     mean_infer_time = 0
     mean_post_time = 0
-    for file_path in glob.glob("*.jpg",root_dir=folder):
+    for file_path in glob.glob("*.jpg", root_dir=folder):
         file = os.path.join(folder, file_path)
         filename = os.path.basename(file_path).split(".")[0]
         img = cv2.imread(file)
@@ -87,28 +170,31 @@ if __name__ == "__main__":
         prob = []
 
         # output = numpy.transpose(output, (0,1,3,4,2))
-        output = numpy.reshape(output,(output.shape[0]*output.shape[1]*output.shape[2]*output.shape[3], output.shape[4]))
+        output = numpy.reshape(
+            output,
+            (
+                output.shape[0] * output.shape[1] * output.shape[2] * output.shape[3],
+                output.shape[4],
+            ),
+        )
 
         for b in range(output.shape[0]):
-            
-            box = output[b,:4].copy()
-            box[0] = (box[0] - box[2]*0.5) * img.shape[1]
-            box[1] = (box[1] - box[3]*0.5) * img.shape[0]
+            box = output[b, :4].copy()
+            box[0] = (box[0] - box[2] * 0.5) * img.shape[1]
+            box[1] = (box[1] - box[3] * 0.5) * img.shape[0]
             box[2] = box[2] * img.shape[1]
             box[3] = box[3] * img.shape[0]
 
             boxes.append(box.astype(int))
 
-            cl = output[b,5:]
+            cl = output[b, 5:]
             classes.append(cl)
-            prob.append(output[b,4])
+            prob.append(output[b, 4])
 
         indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.4, 0.4)
         finished_output_postprocess = time.time()
 
-
         for box_id in indexes:
-            
             label_id = classes[box_id].argmax()
             label = labels_str[label_id]
             box_classes = classes[box_id]
@@ -125,7 +211,7 @@ if __name__ == "__main__":
                 (255, 0, 0),
                 2,
             )
-            orig_box = output[box_id,:4].copy()
+            orig_box = output[box_id, :4].copy()
             orig_box[0] *= img.shape[1]
             orig_box[1] *= img.shape[0]
             orig_box[2] *= img.shape[1]
@@ -134,21 +220,20 @@ if __name__ == "__main__":
             print(box_classes, "->", label)
             print(prob[box_id])
 
-        
         cv2.imwrite(f"{output_folder}/pred_{filename}.png", img)
-        
-        
+
         infer_time = finished_inference - start
         mean_infer_time += infer_time
-        
+
         post_time = finished_output_postprocess - start
         mean_post_time += post_time
         count += 1
-        
-        print(file_path, infer_time,"s", post_time,"s")
-        
+
+        print(file_path, infer_time, "s", post_time, "s")
+
         # cv2.imshow("img", img)
         # cv2.waitKey(0)
-        
-    print("mean inference time: ", mean_infer_time/count, "s")
-    print("mean postprocess time: ", mean_post_time/count, "s")
+
+    print("mean inference time: ", mean_infer_time / count, "s")
+    print("mean postprocess time: ", mean_post_time / count, "s")
+

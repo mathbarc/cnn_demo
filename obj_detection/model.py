@@ -5,54 +5,84 @@ import concurrent.futures
 import mlflow
 import mlflow.pytorch
 
-class YoloOutput(torch.nn.Module):
 
-    def __init__(self, n_input_activation_maps:int, n_classes:int, anchors:List[List[int]], *args, **kwargs):
+class YoloOutput(torch.nn.Module):
+    def __init__(
+        self,
+        n_input_activation_maps: int,
+        n_classes: int,
+        anchors: List[List[int]],
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
 
-        output_layer_channels = (5+n_classes)*len(anchors)        
-        self.conv = torch.nn.Conv2d(n_input_activation_maps, output_layer_channels, (1, 1), (1, 1))
+        output_layer_channels = (5 + n_classes) * len(anchors)
+        self.conv = torch.nn.Conv2d(
+            n_input_activation_maps, output_layer_channels, (1, 1), (1, 1)
+        )
         self.n_classes = torch.tensor(n_classes, requires_grad=False)
-        
+
         anchors_data = torch.tensor(anchors, dtype=torch.float32)
-        self.anchors = torch.nn.Parameter(anchors_data.reshape((anchors_data.size(0),anchors_data.size(1), 1, 1)), requires_grad=True)
-        
+        self.anchors = torch.nn.Parameter(
+            anchors_data.reshape((anchors_data.size(0), anchors_data.size(1), 1, 1)),
+            requires_grad=True,
+        )
 
     def forward(self, features: torch.Tensor):
         # Grid format -> B,C,H,W
 
         grid = self.conv(features)
         # grid = torch.nan_to_num(grid)
-        
+
         with torch.no_grad():
-            grid_cell_position_y, grid_cell_position_x = torch.meshgrid([torch.arange(grid.size(2)), torch.arange(grid.size(3))], indexing='ij')
+            grid_cell_position_y, grid_cell_position_x = torch.meshgrid(
+                [torch.arange(grid.size(2)), torch.arange(grid.size(3))], indexing="ij"
+            )
             grid_cell_position_y = grid_cell_position_y.to(features.device).detach()
             grid_cell_position_x = grid_cell_position_x.to(features.device).detach()
-            grid_dimensions = [grid.size(0),self.anchors.size(0), (5+self.n_classes), grid.size(2), grid.size(3)]
-        
+            grid_dimensions = [
+                grid.size(0),
+                self.anchors.size(0),
+                (5 + self.n_classes),
+                grid.size(2),
+                grid.size(3),
+            ]
+
         grid = grid.reshape(grid_dimensions).to(features.device)
         anchors_tiled = self.anchors.to(features.device)
-        
-        x = ((grid_cell_position_x + torch.sigmoid(grid[:,:,0]))/grid.size(4)).unsqueeze(2)
-        y = ((grid_cell_position_y + torch.sigmoid(grid[:,:,1]))/grid.size(3)).unsqueeze(2)
-        w = (anchors_tiled[:,0] * torch.exp(grid[:,:,2])).unsqueeze(2)
-        h = (anchors_tiled[:,1] * torch.exp(grid[:,:,3])).unsqueeze(2)
-        
-        obj = torch.sigmoid(grid[:,:,4]).unsqueeze(2)
-        classes = torch.sigmoid(grid[:,:,5:])
 
-        final_boxes = torch.cat((x,y,w,h,obj,classes), dim=2)
+        x = (
+            (grid_cell_position_x + torch.sigmoid(grid[:, :, 0])) / grid.size(4)
+        ).unsqueeze(2)
+        y = (
+            (grid_cell_position_y + torch.sigmoid(grid[:, :, 1])) / grid.size(3)
+        ).unsqueeze(2)
+        w = (anchors_tiled[:, 0] * torch.exp(grid[:, :, 2])).unsqueeze(2)
+        h = (anchors_tiled[:, 1] * torch.exp(grid[:, :, 3])).unsqueeze(2)
+
+        obj = torch.sigmoid(grid[:, :, 4]).unsqueeze(2)
+        classes = torch.sigmoid(grid[:, :, 5:])
+
+        final_boxes = torch.cat((x, y, w, h, obj, classes), dim=2)
 
         return final_boxes
-    
-
 
 
 class YoloV2(torch.nn.Module):
-    def __init__(self, n_input_channels:int, n_classes:int, anchors:List[List[int]], *args, **kwargs) -> None:
+    def __init__(
+        self,
+        n_input_channels: int,
+        n_classes: int,
+        anchors: List[List[int]],
+        *args,
+        **kwargs,
+    ) -> None:
         super().__init__(*args, **kwargs)
 
-        self.conv1 = torchvision.ops.Conv2dNormActivation(n_input_channels, 16, (3, 3), (1, 1))
+        self.conv1 = torchvision.ops.Conv2dNormActivation(
+            n_input_channels, 16, (3, 3), (1, 1)
+        )
         self.conv2 = torchvision.ops.Conv2dNormActivation(16, 32, (3, 3), (1, 1))
         self.conv3 = torchvision.ops.Conv2dNormActivation(32, 64, (3, 3), (1, 1))
         self.conv4 = torchvision.ops.Conv2dNormActivation(64, 128, (3, 3), (1, 1))
@@ -65,7 +95,7 @@ class YoloV2(torch.nn.Module):
 
         self.pool1 = torch.nn.MaxPool2d(2, stride=2)
         self.pool2 = torch.nn.MaxPool2d(2, stride=1)
-    
+
     def forward(self, image):
         i = image.float()
         x = self.conv1(i)
@@ -91,21 +121,18 @@ class YoloV2(torch.nn.Module):
         x = self.conv8(head_result)
         o1 = self.output(x)
 
-        o1 = torch.permute(o1, (0,1,3,4,2))
+        o1 = torch.permute(o1, (0, 1, 3, 4, 2))
 
         return o1
 
-
-
-    def save_model(self, name: str = "yolov2", input_size = (416,416), device = None):
-        
+    def save_model(self, name: str = "yolov2", input_size=(416, 416), device=None):
         mlflow.pytorch.log_model(self, name, extra_files=[__file__])
-        
+
         input_sample = torch.ones((1, 3, input_size[1], input_size[0]))
         if device is not None:
             input_sample = input_sample.to(device)
         model_file_name = f"{name}.onnx"
-        # dynamic_params = {"features":{0:"batch_size", 2:"image_height", 3:"image_width"}, 
+        # dynamic_params = {"features":{0:"batch_size", 2:"image_height", 3:"image_width"},
         #                   "output1":{0:"batch_size",3:"grid_y",4:"grid_x"},
         #                   "output2":{0:"batch_size",3:"grid_y",4:"grid_x"}}
         torch.onnx.export(
@@ -114,83 +141,103 @@ class YoloV2(torch.nn.Module):
             model_file_name,
             input_names=["features"],
             output_names=["output"],
-            opset_version=11
+            opset_version=11,
             # dynamic_axes=dynamic_params
         )
 
         mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
 
 
-def calc_batch_loss(detections:torch.Tensor, annotations, class_loss, obj_gain, no_obj_gain):
-    batch_position_loss = torch.zeros([1], device=detections.device,requires_grad=False)
-    batch_classification_loss = torch.zeros([1], device=detections.device,requires_grad=False)
-    batch_with_obj_detection_loss = torch.zeros([1], device=detections.device,requires_grad=False)
-    batch_without_obj_detection_loss = torch.zeros([1], device=detections.device,requires_grad=False)
-    
-    obj_boxes = detections[:,:,:,0:4]
+def calc_batch_loss(
+    detections: torch.Tensor, annotations, class_loss, obj_gain, no_obj_gain
+):
+    batch_position_loss = torch.zeros(
+        [1], device=detections.device, requires_grad=False
+    )
+    batch_classification_loss = torch.zeros(
+        [1], device=detections.device, requires_grad=False
+    )
+    batch_with_obj_detection_loss = torch.zeros(
+        [1], device=detections.device, requires_grad=False
+    )
+    batch_without_obj_detection_loss = torch.zeros(
+        [1], device=detections.device, requires_grad=False
+    )
+
+    obj_boxes = detections[:, :, :, 0:4]
     obj_boxes_xyxy = torchvision.ops.box_convert(obj_boxes, "cxcywh", "xyxy")
-    
-    zero = torch.zeros([1], device=detections.device,requires_grad=False)[0]
-    one = torch.ones([1], device=detections.device,requires_grad=False)
+
+    zero = torch.zeros([1], device=detections.device, requires_grad=False)[0]
+    one = torch.ones([1], device=detections.device, requires_grad=False)
 
     if annotations["boxes"].shape[0] > 0:
-        
         ann_boxes = annotations["boxes"].to(detections.device)
         ann_classes = annotations["labels"].to(detections.device)
-        
+
         ann_xyxy = torchvision.ops.box_convert(ann_boxes, "cxcywh", "xyxy").detach()
         contains_obj = {}
 
         for i in range(ann_xyxy.size(0)):
             ann_box = ann_xyxy[i]
 
-            cellX = int((ann_box[0].item() + ann_box[2].item()) * 0.5 * detections.size(2))
-            cellY = int((ann_box[1].item() + ann_box[3].item()) * 0.5 * detections.size(1))
+            cellX = int(
+                (ann_box[0].item() + ann_box[2].item()) * 0.5 * detections.size(2)
+            )
+            cellY = int(
+                (ann_box[1].item() + ann_box[3].item()) * 0.5 * detections.size(1)
+            )
 
-            iou = torchvision.ops.box_iou(obj_boxes_xyxy[:,cellY, cellX,:], ann_box.view(1,-1))
+            iou = torchvision.ops.box_iou(
+                obj_boxes_xyxy[:, cellY, cellX, :], ann_box.view(1, -1)
+            )
             ious = iou.squeeze().tolist()
-            
+
             rank_iou = list(enumerate(ious))
-            rank_iou.sort(key=lambda x: x[1],reverse=True)
-            
+            rank_iou.sort(key=lambda x: x[1], reverse=True)
+
             for best_iou_id in rank_iou:
                 if best_iou_id[1] < 0.25:
                     break
-                p = (best_iou_id[0], cellY, cellX) 
+                p = (best_iou_id[0], cellY, cellX)
                 if p not in contains_obj:
-                    contains_obj[p] = (i,iou[best_iou_id[0]])
+                    contains_obj[p] = (i, iou[best_iou_id[0]])
                     break
 
         for i in range(detections.shape[0]):
             for j in range(detections.shape[1]):
                 for k in range(detections.shape[2]):
-                    pos = (i,j,k)
-                    
+                    pos = (i, j, k)
+
                     if pos in contains_obj:
                         ann_id, best_iou = contains_obj[pos]
-                        batch_position_loss += torch.nn.functional.mse_loss(best_iou, one)
-                        # batch_position_loss += 1-best_iou 
-                        # batch_position_loss += torchvision.ops.distance_box_iou_loss(obj_boxes_xyxy[i,j,k], ann_xyxy[ann_id])
-                        batch_with_obj_detection_loss += torch.nn.functional.mse_loss(detections[i,j,k,4], best_iou.detach()[0])
-                        batch_classification_loss += class_loss(detections[i,j,k,5:], ann_classes[ann_id])
+                        batch_position_loss += torch.nn.functional.mse_loss(
+                            best_iou, one
+                        )
+                        batch_with_obj_detection_loss += torch.nn.functional.mse_loss(
+                            detections[i, j, k, 4], best_iou.detach()[0]
+                        )
+                        batch_classification_loss += class_loss(
+                            detections[i, j, k, 5:], ann_classes[ann_id]
+                        )
                     else:
-                        batch_without_obj_detection_loss += torch.nn.functional.mse_loss(detections[i,j,k,4], zero)
+                        batch_without_obj_detection_loss += (
+                            torch.nn.functional.mse_loss(detections[i, j, k, 4], zero)
+                        )
 
-        # batch_position_loss = batch_position_loss / annotations["boxes"].shape[0]
-        # batch_classification_loss = batch_classification_loss / annotations["boxes"].shape[0]
-        # batch_with_obj_detection_loss = batch_with_obj_detection_loss / annotations["boxes"].shape[0]
-        # batch_without_obj_detection_loss = batch_without_obj_detection_loss / (detections.shape[0]*detections.shape[1]*detections.shape[2] - annotations["boxes"].shape[0])
-        
     else:
         for i in range(detections.shape[0]):
             for j in range(detections.shape[1]):
                 for k in range(detections.shape[2]):
-                    batch_without_obj_detection_loss += torch.nn.functional.mse_loss(detections[i,j,k,4], zero)
-        
-        # batch_without_obj_detection_loss = batch_without_obj_detection_loss / (detections.shape[0]*detections.shape[1]*detections.shape[2] - annotations["boxes"].shape[0])
-    
-    
-    return batch_position_loss, batch_classification_loss, (obj_gain * batch_with_obj_detection_loss) + (no_obj_gain * batch_without_obj_detection_loss)
+                    batch_without_obj_detection_loss += torch.nn.functional.mse_loss(
+                        detections[i, j, k, 4], zero
+                    )
+
+    return (
+        batch_position_loss,
+        batch_classification_loss,
+        (obj_gain * batch_with_obj_detection_loss)
+        + (no_obj_gain * batch_without_obj_detection_loss),
+    )
 
 
 def calc_obj_detection_loss(
@@ -200,58 +247,70 @@ def calc_obj_detection_loss(
     coordinates_gain: float = 1.0,
     classification_gain: float = 1.0,
     obj_gain: float = 5.0,
-    no_obj_gain: float = .5,
-    parallel: bool = False
+    no_obj_gain: float = 0.5,
+    parallel: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     n_batches = detections.size()[0]
-    
-    detections = torch.nan_to_num(detections,0,0,0)
+
+    detections = torch.nan_to_num(detections, 0, 0, 0)
 
     position_loss = 0
     classification_loss = 0
     obj_detection_loss = 0
-    
-    if parallel:
 
+    if parallel:
         executor = concurrent.futures.ThreadPoolExecutor(n_batches)
         batch_processing = []
 
         for batch_id in range(n_batches):
-
-            batch_process = executor.submit(calc_batch_loss, detections[batch_id], annotations[batch_id], class_loss, obj_gain, no_obj_gain)
+            batch_process = executor.submit(
+                calc_batch_loss,
+                detections[batch_id],
+                annotations[batch_id],
+                class_loss,
+                obj_gain,
+                no_obj_gain,
+            )
             batch_processing.append(batch_process)
 
         for batch_process in batch_processing:
-            
-            batch_position_loss, batch_classification_loss, batch_obj_detection_loss = batch_process.result()
+            batch_position_loss, batch_classification_loss, batch_obj_detection_loss = (
+                batch_process.result()
+            )
 
             position_loss += batch_position_loss
             classification_loss += batch_classification_loss
             obj_detection_loss += batch_obj_detection_loss
     else:
-
         for batch_id in range(n_batches):
-            
-            batch_position_loss, batch_classification_loss, batch_obj_detection_loss = calc_batch_loss(detections[batch_id], annotations[batch_id], class_loss, obj_gain, no_obj_gain)
-            
+            batch_position_loss, batch_classification_loss, batch_obj_detection_loss = (
+                calc_batch_loss(
+                    detections[batch_id],
+                    annotations[batch_id],
+                    class_loss,
+                    obj_gain,
+                    no_obj_gain,
+                )
+            )
+
             position_loss += batch_position_loss
             classification_loss += batch_classification_loss
             obj_detection_loss += batch_obj_detection_loss
 
-
-
     return (
-        (coordinates_gain * position_loss),#/n_batches,
-        obj_detection_loss,#/n_batches,
-        (classification_gain * classification_loss)#/n_batches
+        (coordinates_gain * position_loss),  # /n_batches,
+        obj_detection_loss,  # /n_batches,
+        (classification_gain * classification_loss),  # /n_batches
     )
 
 
 if __name__ == "__main__":
     device = torch.device("cuda")
-    model = YoloV2(3, 2, [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]]).to(device)
+    model = YoloV2(
+        3, 2, [[10, 14], [23, 27], [37, 58], [81, 82], [135, 169], [344, 319]]
+    ).to(device)
 
-    input_sample = torch.ones((1,3, 416,416))*0.5
+    input_sample = torch.ones((1, 3, 416, 416)) * 0.5
     input_sample = input_sample.to(device)
 
     import time
@@ -259,23 +318,21 @@ if __name__ == "__main__":
     mean = 0
 
     for i in range(10):
-
         start = time.time()
 
         output = model(input_sample)
 
         end = time.time()
 
-        v = (end - start)
+        v = end - start
         mean += v
         print(v)
-    
+
         time.sleep(1)
 
     print()
-    print(mean/10)
+    print(mean / 10)
 
     model.save_model(device=device)
-    
 
     ...
