@@ -23,7 +23,7 @@ def softmax(data):
 
 if __name__ == "__main__":
     # net = cv2.dnn.readNetFromONNX("yolo11n.onnx")
-    net = cv2.dnn.readNetFromONNX("obj_detection_best.onnx")
+    net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
     # net = cv2.dnn.readNetFromONNX("last.onnx")
     # net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
     # net = cv2.dnn.readNetFromTorch("obj_det.pt")
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
     net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
-    flops = net.getFLOPS((1, 3, 640, 640)) * 10e-9
+    flops = net.getFLOPS((1, 3, 416, 416)) * 10e-9
     print(round(flops, 3), "BFLOPs")
 
     # input_test = numpy.ones((1, 3, 416, 416))*0.5
@@ -146,6 +146,7 @@ if __name__ == "__main__":
     os.makedirs(output_folder, exist_ok=True)
 
     outLayers = net.getUnconnectedOutLayersNames()
+    print(outLayers)
 
     count = 0
     mean_infer_time = 0
@@ -154,15 +155,14 @@ if __name__ == "__main__":
         file = os.path.join(folder, file_path)
         filename = os.path.basename(file_path).split(".")[0]
         img = cv2.imread(file)
-        labels_str = ["disease"]
 
         input_img = cv2.dnn.blobFromImage(
-            img, scalefactor=1.0 / 255.0, size=(640, 640), swapRB=True
+            img, scalefactor=1.0 / 255.0, size=(416, 416), swapRB=True
         )
 
         start = time.time()
-        net.setInput(input_img, "images")
-        output = net.forward(outLayers)
+        net.setInput(input_img, "features")
+        output = net.forward(outLayers)[0]
         finished_inference = time.time()
 
         boxes = []
@@ -236,4 +236,3 @@ if __name__ == "__main__":
 
     print("mean inference time: ", mean_infer_time / count, "s")
     print("mean postprocess time: ", mean_post_time / count, "s")
-

@@ -26,7 +26,7 @@ if __name__ == "__main__":
     # dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Train.json")
     # validation_dataset = data_loader.CocoDataset("/data/hd1/Dataset/leafs/images","/data/hd1/Dataset/leafs/annotations/instances_Test.json")
 
-    dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
+    dataloader = data_loader.ObjDetectionDataLoader(dataset, 64, 368, 512)
 
     cnn = model.YoloV2(3, dataset.get_categories_count(), dataset.compute_anchors(6))
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     lr = 1e-3
     lr_rampup_period = 1000
-    epochs = 100
+    epochs = 10
     obj_loss_gain = 1.0
     no_obj_loss_gain = 0.05
     classification_loss_gain = 1.0
