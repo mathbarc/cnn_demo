@@ -422,7 +422,7 @@ def train(
             )
 
             total_loss = position_loss + obj_detection_loss + classification_loss
-            loss = total_loss / dataloader.batch_size
+            loss = total_loss
             loss.backward()
 
             if gradient_clip is not None:
@@ -436,11 +436,10 @@ def train(
 
             if batch_counter % 30 == 0:
                 metrics = {
-                    "total_loss": total_loss.item() / dataloader.batch_size,
-                    "position_loss": position_loss.item() / dataloader.batch_size,
-                    "class_loss": classification_loss.item() / dataloader.batch_size,
-                    "object_presence_loss": obj_detection_loss.item()
-                    / dataloader.batch_size,
+                    "total_loss": total_loss.item(),
+                    "position_loss": position_loss.item(),
+                    "class_loss": classification_loss.item(),
+                    "object_presence_loss": obj_detection_loss.item(),
                     "lr": optimizer.param_groups[0]["lr"],
                 }
 

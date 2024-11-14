@@ -214,7 +214,7 @@ def calc_batch_loss(
                             best_iou, one
                         )
                         batch_with_obj_detection_loss += torch.nn.functional.mse_loss(
-                            detections[i, j, k, 4], best_iou.detach()[0]
+                            detections[i, j, k, 4], one
                         )
                         batch_classification_loss += class_loss(
                             detections[i, j, k, 5:], ann_classes[ann_id]
@@ -298,9 +298,9 @@ def calc_obj_detection_loss(
             obj_detection_loss += batch_obj_detection_loss
 
     return (
-        (coordinates_gain * position_loss),  # /n_batches,
-        obj_detection_loss,  # /n_batches,
-        (classification_gain * classification_loss),  # /n_batches
+        (coordinates_gain * position_loss) / n_batches,
+        obj_detection_loss / n_batches,
+        (classification_gain * classification_loss) / n_batches,
     )
 
 
