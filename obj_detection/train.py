@@ -434,7 +434,7 @@ def train(
             if batch_counter % 100 == 99:
                 cnn.save_model("last", device=device)
 
-            if batch_counter % 30 == 0:
+            if batch_counter % 10 == 0:
                 metrics = {
                     "total_loss": total_loss.item(),
                     "position_loss": position_loss.item(),
