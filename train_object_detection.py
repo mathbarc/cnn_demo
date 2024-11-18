@@ -1,11 +1,12 @@
 import torch
 from obj_detection import train, model, data_loader
-from obj_detection.train import (
+from obj_detection.lr_functions import (
     ObjDetectionCosineAnnealingLR,
     ObjDetectionExponentialDecayLR,
     ObjDetectionCosineDecayLR,
     ObjDetectionLogisticDecayLR,
     ObjDetectionRampUpLR,
+    YoloObjDetectionRampUpLR,
 )
 
 if __name__ == "__main__":
@@ -34,7 +35,7 @@ if __name__ == "__main__":
 
     lr = 1e-3
     lr_rampup_period = 200
-    epochs = 2
+    epochs = 4
     obj_loss_gain = 1.0
     no_obj_loss_gain = 0.05
     classification_loss_gain = 1.0
@@ -45,11 +46,14 @@ if __name__ == "__main__":
 
     # scheduler = ObjDetectionCosineDecayLR(optimizer, lr, 1e-8, (epochs*len(dataloader)), lr_rampup_period)
     # scheduler = ObjDetectionExponentialDecayLR(optimizer, lr, 1e-8, (epochs*len(dataloader)), lr_rampup_period)
-    scheduler = ObjDetectionLogisticDecayLR(
-        optimizer, lr, 1e-8, (epochs * len(dataloader)), lr_rampup_period
-    )
+
+    # scheduler = ObjDetectionLogisticDecayLR(
+    #     optimizer, lr, 1e-8, (epochs * len(dataloader)), lr_rampup_period
+    # )
+
     # scheduler = ObjDetectionCosineAnnealingLR(optimizer, lr, 1e-8, lr_rampup_period, 1000, 2, 4)
     # scheduler = ObjDetectionRampUpLR(optimizer, lr, lr_rampup_period)
+    scheduler = YoloObjDetectionRampUpLR(optimizer, {200: 1e-3, 2000: 1e-4}, 1e-2, 100)
 
     train.train(
         dataloader,
