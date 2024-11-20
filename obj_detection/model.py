@@ -319,31 +319,39 @@ if __name__ == "__main__":
     device = torch.device("cuda")
     model = YoloV2(
         3, 2, [[10, 14], [23, 27], [37, 58], [81, 82], [135, 169], [344, 319]]
-    ).to(device)
-
-    input_sample = torch.ones((1, 3, 416, 416)) * 0.5
-    input_sample = input_sample.to(device)
-
+    )
+    import cProfile
+    import data_loader
     import time
 
-    mean = 0
+    dataset = data_loader.CocoDataset(
+        "/data/ssd1/Datasets/Coco/train2017",
+        "/data/ssd1/Datasets/Coco/annotations/instances_train2017.json",
+    )
 
-    for i in range(10):
-        start = time.time()
+    dataloader = data_loader.ObjDetectionDataLoader(dataset, 64, 368, 512)
 
-        output = model(input_sample)
+    with cProfile.Profile() as profile:
+        mean = 0
+        count = 0
+        for input_sample, target in dataloader:
+            start = time.time()
 
-        end = time.time()
+            output = model(input_sample)
+            loss = calc_obj_detection_loss(output, target)
 
-        v = end - start
-        mean += v
-        print(v)
+            end = time.time()
 
-        time.sleep(1)
+            v = end - start
+            mean += v
+            print(v)
 
-    print()
-    print(mean / 10)
+            time.sleep(1)
+            if count == 10:
+                print(mean / 10)
+                count = 0
+            break
 
-    model.save_model(device=device)
+        profile.dump_stats("profile.prof")
 
     ...
