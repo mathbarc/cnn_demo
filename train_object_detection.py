@@ -53,7 +53,9 @@ if __name__ == "__main__":
 
     # scheduler = ObjDetectionCosineAnnealingLR(optimizer, lr, 1e-8, lr_rampup_period, 1000, 2, 4)
     # scheduler = ObjDetectionRampUpLR(optimizer, lr, lr_rampup_period)
-    scheduler = YoloObjDetectionRampUpLR(optimizer, {200: 1e-3, 2000: 1e-4}, 1e-2, 100)
+    scheduler = YoloObjDetectionRampUpLR(
+        optimizer, {len(dataloader): 1e-3, 3 * len(dataloader): 1e-4}, 1e-2, 100
+    )
 
     train.train(
         dataloader,
