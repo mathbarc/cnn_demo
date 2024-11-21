@@ -199,13 +199,14 @@ def calc_batch_loss(
                 if best_iou_id[1] < 0.25:
                     break
                 p = (best_iou_id[0], cellY, cellX)
-                if p not in contains_obj:
-                    contains_obj[p] = []
 
-                contains_obj[p].append((i, iou[best_iou_id[0]]))
                 # if p not in contains_obj:
-                #     contains_obj[p] = (i, iou[best_iou_id[0]])
-                #     break
+                #     contains_obj[p] = []
+                # contains_obj[p].append((i, iou[best_iou_id[0]]))
+
+                if p not in contains_obj:
+                    contains_obj[p] = (i, iou[best_iou_id[0]])
+                    break
 
         for i in range(detections.shape[0]):
             for j in range(detections.shape[1]):
@@ -213,25 +214,40 @@ def calc_batch_loss(
                     pos = (i, j, k)
 
                     if pos in contains_obj:
-                        cobjs = contains_obj[pos]
-                        for ann_id, best_iou in cobjs:
-                            # ann_id, best_iou = contains_obj[pos]
-                            # batch_position_loss += torch.nn.functional.mse_loss(
-                            #     best_iou, one
-                            # )
-                            batch_position_loss += (
-                                torchvision.ops.complete_box_iou_loss(
-                                    obj_boxes_xyxy[i, j, k], ann_xyxy[ann_id]
-                                )
-                            )
-                            batch_with_obj_detection_loss += (
-                                torch.nn.functional.mse_loss(
-                                    detections[i, j, k, 4], one
-                                )
-                            )
-                            batch_classification_loss += class_loss(
-                                detections[i, j, k, 5:], ann_classes[ann_id]
-                            )
+                        ann_id, best_iou = contains_obj[pos]
+
+                        # ann_id, best_iou = contains_obj[pos]
+                        # batch_position_loss += torch.nn.functional.mse_loss(
+                        #     best_iou, one
+                        # )
+                        batch_position_loss += torchvision.ops.complete_box_iou_loss(
+                            obj_boxes_xyxy[i, j, k], ann_xyxy[ann_id]
+                        )
+                        batch_with_obj_detection_loss += torch.nn.functional.mse_loss(
+                            detections[i, j, k, 4], one
+                        )
+                        batch_classification_loss += class_loss(
+                            detections[i, j, k, 5:], ann_classes[ann_id]
+                        )
+
+                        # for ann_id, best_iou in cobjs:
+                        #     # ann_id, best_iou = contains_obj[pos]
+                        #     # batch_position_loss += torch.nn.functional.mse_loss(
+                        #     #     best_iou, one
+                        #     # )
+                        #     batch_position_loss += (
+                        #         torchvision.ops.complete_box_iou_loss(
+                        #             obj_boxes_xyxy[i, j, k], ann_xyxy[ann_id]
+                        #         )
+                        #     )
+                        #     batch_with_obj_detection_loss += (
+                        #         torch.nn.functional.mse_loss(
+                        #             detections[i, j, k, 4], one
+                        #         )
+                        #     )
+                        #     batch_classification_loss += class_loss(
+                        #         detections[i, j, k, 5:], ann_classes[ann_id]
+                        #     )
                     else:
                         batch_without_obj_detection_loss += (
                             torch.nn.functional.mse_loss(detections[i, j, k, 4], zero)
