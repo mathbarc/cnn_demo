@@ -215,11 +215,9 @@ def calc_batch_loss(
 
                     if pos in contains_obj:
                         ann_id, best_iou = contains_obj[pos]
-
-                        # ann_id, best_iou = contains_obj[pos]
-                        # batch_position_loss += torch.nn.functional.mse_loss(
-                        #     best_iou, one
-                        # )
+                        batch_position_loss += torch.nn.functional.mse_loss(
+                            best_iou, one
+                        )
                         batch_position_loss += torchvision.ops.complete_box_iou_loss(
                             obj_boxes_xyxy[i, j, k], ann_xyxy[ann_id]
                         )
@@ -230,6 +228,7 @@ def calc_batch_loss(
                             detections[i, j, k, 5:], ann_classes[ann_id]
                         )
 
+                        # cobjs = contains_obj[pos]
                         # for ann_id, best_iou in cobjs:
                         #     # ann_id, best_iou = contains_obj[pos]
                         #     # batch_position_loss += torch.nn.functional.mse_loss(
