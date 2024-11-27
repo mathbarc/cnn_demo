@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
 
-    cnn = model.YoloV2(3, dataset.get_categories_count(), dataset.compute_anchors(6))
+    cnn = model.YoloV2(3, dataset.get_categories_count(), dataset.compute_anchors(4))
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[10,14],[23,27],[37,58],[81,82],[135,169],[344,319]])
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
@@ -54,7 +54,16 @@ if __name__ == "__main__":
     # scheduler = ObjDetectionCosineAnnealingLR(optimizer, lr, 1e-8, lr_rampup_period, 1000, 2, 4)
     # scheduler = ObjDetectionRampUpLR(optimizer, lr, lr_rampup_period)
     scheduler = YoloObjDetectionRampUpLR(
-        optimizer, {len(dataloader): 1e-3, 3 * len(dataloader): 1e-4}, 1e-2, 500
+        optimizer,
+        {
+            200: 1e-3,
+            len(dataloader): 1e-4,
+            2 * len(dataloader): 1e-5,
+            4 * len(dataloader): 1e-6,
+        },
+        1e-2,
+        100,
+        1e-8,
     )
 
     train.train(
