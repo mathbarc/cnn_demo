@@ -41,8 +41,8 @@ if __name__ == "__main__":
     classification_loss_gain = 1.0
     coordinates_loss_gain = 1.0
 
-    # optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
-    optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
+    optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
+    # optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
 
     # scheduler = ObjDetectionCosineDecayLR(optimizer, lr, 1e-8, (epochs*len(dataloader)), lr_rampup_period)
     # scheduler = ObjDetectionExponentialDecayLR(optimizer, lr, 1e-8, (epochs*len(dataloader)), lr_rampup_period)
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     scheduler = YoloObjDetectionRampUpLR(
         optimizer,
         {
-            200: 1e-3,
+            1000: 1e-3,
             len(dataloader): 1e-4,
             2 * len(dataloader): 1e-5,
             4 * len(dataloader): 1e-6,
