@@ -1,11 +1,11 @@
 import matplotlib.pyplot
-from obj_detection.train import ObjDetectionExponentialDecayLR, ObjDetectionCosineAnnealingLR, ObjDetectionCosineDecayLR, ObjDetectionLogisticDecayLR, ObjDetectionLR, ObjDetectionRampUpLR
+from obj_detection.lr_functions import ObjDetectionCosineDecayLR
 import matplotlib
 
 lr = 1e-3
 epochs = 1000
 lr_ramp_down = 1000
-steps = epochs*100
+steps = epochs * 100
 
 # scheduler = ObjDetectionLR(None, lr, 0.01, lr_ramp_down)
 # scheduler = ObjDetectionRampUpLR(None, lr, lr_ramp_down)
@@ -17,8 +17,8 @@ scheduler = ObjDetectionCosineDecayLR(None, lr, 1e-8, steps, lr_ramp_down)
 lrs = []
 for i in range(steps):
     lr = scheduler.get_last_lr()
-    scheduler._current_step+=1
+    scheduler._current_step += 1
     lrs.append(lr)
-    
+
 matplotlib.pyplot.plot(lrs)
 matplotlib.pyplot.show()

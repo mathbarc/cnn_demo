@@ -37,9 +37,9 @@ if __name__ == "__main__":
     lr_rampup_period = 200
     epochs = 8
     obj_loss_gain = 1.0
-    no_obj_loss_gain = 0.05
-    classification_loss_gain = 1.0
-    coordinates_loss_gain = 1.0
+    no_obj_loss_gain = 1.0
+    classification_loss_gain = 0.5
+    coordinates_loss_gain = 0.05
 
     optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
     # optimizer = torch.optim.Adam(cnn.parameters(), lr, weight_decay=5e-4)
@@ -62,7 +62,7 @@ if __name__ == "__main__":
             4 * len(dataloader): 1e-6,
         },
         1e-2,
-        100,
+        200,
         1e-8,
     )
 
@@ -79,6 +79,7 @@ if __name__ == "__main__":
         coordinates_loss_gain,
         classification_loss_gain,
         lr_rampup_period,
+        2.0,
     )
 
     ...

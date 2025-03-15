@@ -101,7 +101,7 @@ def train(
 
     best_map = 0
 
-    mlflow.set_tracking_uri("http://mlflow.cluster.local/")
+    mlflow.set_tracking_uri("http://mlflow.solv.local/")
     experiment = mlflow.get_experiment_by_name("Object Detection")
     if experiment is None:
         experiment_id = mlflow.create_experiment("Object Detection")

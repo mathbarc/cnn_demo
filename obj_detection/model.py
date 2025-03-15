@@ -193,8 +193,14 @@ def calc_batch_loss(
 
             p = (iou.argmax().item(), cellY, cellX)
 
+            if p[0] < 0.2:
+                continue
+
             if p not in contains_obj:
                 contains_obj[p] = (i, iou.max())
+            else:
+                if contains_obj[p][1] < iou.max():
+                    contains_obj[p] = (i, iou.max())
 
         for i in range(detections.shape[0]):
             for j in range(detections.shape[1]):
