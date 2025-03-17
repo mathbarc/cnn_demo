@@ -35,10 +35,10 @@ if __name__ == "__main__":
     scheduler = YoloObjDetectionRampUpLR(
         optimizer,
         {
-            500: 1e-3,
-            1000: 1e-4,
-            3 * len(dataloader): 1e-5,
-            6 * len(dataloader): 1e-6,
+            1000: 1e-3,
+            len(dataloader): 1e-4,
+            5 * len(dataloader): 1e-5,
+            8 * len(dataloader): 1e-6,
         },
         1e-2,
         lr_rampup_period,

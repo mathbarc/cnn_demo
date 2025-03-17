@@ -230,7 +230,6 @@ def obj_detection_loss(
     no_obj_gain: float = 0.5,
 ):
 
-    n_batches = detections.shape[0]
     target = create_annotations_batch(detections, annotations, anchors)
     target = target.to(detections.device)
 
@@ -238,12 +237,9 @@ def obj_detection_loss(
     det_obj = detections[..., 4:5]
     det_cls = detections[..., 5:]
 
-    det_cls = torch.permute(det_cls, (0, 4, 1, 2, 3))
-
     target_boxes = target[..., :4]
     target_obj = target[..., 4:5]
     target_cls = target[..., 5:]
-    target_cls = torch.permute(target_cls, (0, 4, 1, 2, 3))
 
     coordinates_loss = coordinates_gain * torch.mean(
         torch.sum(
@@ -271,8 +267,11 @@ def obj_detection_loss(
 
     obj_loss = conf_obj_loss + no_obj_gain * conf_noobj_loss
 
-    cls_err = torch.nn.functional.cross_entropy(det_cls, target_cls, reduction="none")
-    cls_err = torch.unsqueeze(cls_err, -1)
+    cls_err = torch.nn.functional.binary_cross_entropy(
+        det_cls, target_cls, reduction="none"
+    )
+
+    cls_err = torch.sum(cls_err, 4, keepdim=True)
 
     cls_loss = classification_gain * torch.mean(
         torch.sum(target_obj * cls_err, (1, 2, 3, 4))
