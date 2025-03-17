@@ -34,7 +34,7 @@ if __name__ == "__main__":
     # cnn = model.YoloV2(3, dataset.get_categories_count(), [[0.57273, 0.677385], [1.87446, 2.06253], [3.33843, 5.47434], [7.88282, 3.52778], [9.77052, 9.16828]])
 
     lr = 1e-3
-    lr_rampup_period = 200
+    lr_rampup_period = 1000
     epochs = 8
     obj_loss_gain = 1.0
     no_obj_loss_gain = 1.0

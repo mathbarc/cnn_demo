@@ -1,9 +1,11 @@
+from matplotlib.pyplot import grid
 import torch
 from typing import List, Tuple, Callable
 import torchvision
 import concurrent.futures
 import mlflow
 import mlflow.pytorch
+from torchvision.ops import boxes
 
 
 class YoloOutput(torch.nn.Module):
@@ -146,6 +148,133 @@ class YoloV2(torch.nn.Module):
         )
 
         mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
+
+
+def compute_iou(anchor_w, anchor_h, bbox_w, bbox_h):
+    inter_w = min(anchor_w, bbox_w)
+    inter_h = min(anchor_h, bbox_h)
+    intersection_area = inter_w * inter_h
+
+    anchor_area = anchor_w * anchor_h
+    bbox_area = bbox_w * bbox_h
+
+    union_area = anchor_area + bbox_area - intersection_area
+
+    iou = intersection_area / union_area
+    return iou
+
+
+def generate_target_from_anotation(annotations, grid_size, anchors: torch.Tensor):
+    ann_boxes = annotations["boxes"]
+    ann_labels = annotations["labels"]
+
+    target_tensor = torch.zeros(
+        (grid_size[0], grid_size[1], grid_size[2], grid_size[3])
+    )
+
+    for ann_id in range(len(ann_boxes)):
+        bbox = ann_boxes[ann_id]
+        label = ann_labels[ann_id]
+
+        x_center, y_center, width, height = bbox
+
+        grid_x = int(x_center * grid_size[2])
+        grid_y = int(y_center * grid_size[1])
+
+        if grid_x < grid_size[2] and grid_y < grid_size[1]:
+            best_iou = -1
+            best_anchor = -1
+            for i in range(grid_size[0]):
+                anchor_w = anchors[i, 0].item()
+                anchor_h = anchors[i, 1].item()
+                iou = compute_iou(anchor_w, anchor_h, width, height)
+                if iou > best_iou:
+                    best_iou = iou
+                    best_anchor = i
+
+            target_tensor[best_anchor, grid_y, grid_x, 0] = (
+                x_center * grid_size[2] - grid_x
+            )
+            target_tensor[best_anchor, grid_y, grid_x, 1] = (
+                y_center * grid_size[1] - grid_y
+            )
+            target_tensor[best_anchor, grid_y, grid_x, 2] = width
+            target_tensor[best_anchor, grid_y, grid_x, 3] = height
+            target_tensor[best_anchor, grid_y, grid_x, 4] = 1
+            target_tensor[best_anchor, grid_y, grid_x, 5:] = label
+
+    return target_tensor
+
+
+def create_annotations_batch(detections, annotations, anchors) -> torch.Tensor:
+
+    target = None
+    with torch.no_grad():
+        n_batches = detections.shape[0]
+        grid_size = (
+            detections.shape[1],
+            detections.shape[2],
+            detections.shape[3],
+            detections.shape[4],
+        )
+
+        for batch_id in range(n_batches):
+            t = generate_target_from_anotation(
+                annotations[batch_id], grid_size, anchors
+            )
+            t = torch.unsqueeze(t, 0)
+            if target is not None:
+                target = torch.concatenate([target, t])
+            else:
+                target = t
+    return target
+
+
+def obj_detection_loss(
+    detections: torch.Tensor,
+    annotations,
+    anchors,
+    coordinates_gain: float = 1.0,
+    classification_gain: float = 1.0,
+    no_obj_gain: float = 0.5,
+):
+
+    target = create_annotations_batch(detections, annotations, anchors)
+    target = target.to(detections.device)
+
+    det_boxes = detections[..., :4]
+    det_obj = detections[..., 4:5]
+    det_cls = detections[..., 5:]
+
+    det_cls = torch.permute(det_cls, (0, 4, 1, 2, 3))
+
+    target_boxes = target[..., :4]
+    target_obj = target[..., 4:5]
+    target_cls = target[..., 5:]
+    target_cls = torch.permute(target_cls, (0, 4, 1, 2, 3))
+
+    coordinates_loss = coordinates_gain * torch.sum(
+        target_obj
+        * torch.nn.functional.mse_loss(det_boxes, target_boxes, reduction="none")
+    )
+
+    conf_obj_loss = torch.sum(
+        target_obj * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none")
+    )
+
+    conf_noobj_loss = torch.sum(
+        (1 - target_obj)
+        * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none")
+    )
+
+    obj_loss = conf_obj_loss + no_obj_gain * conf_noobj_loss
+
+    cls_err = torch.nn.functional.cross_entropy(det_cls, target_cls, reduction="none")
+    cls_err = torch.unsqueeze(cls_err, -1)
+
+    cls_loss = classification_gain * torch.sum(target_obj * cls_err)
+
+    return coordinates_loss, obj_loss, cls_loss
 
 
 def calc_batch_loss(

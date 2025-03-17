@@ -1,5 +1,6 @@
 import os
 
+from mlflow import data
 from pycocotools.coco import COCO
 
 import torch
@@ -194,7 +195,15 @@ if __name__ == "__main__":
 
     dataloader = ObjDetectionDataLoader(dataset, 1, 368, 512)
 
-    print(dataset.get_categories_count())
+    print(
+        dataset.get_categories_count(),
+        ": ",
+        min(dataset._id_label_list),
+        max(dataset._id_label_list),
+    )
+
+    print(dataset._label_dict)
+
     device = torch.device("cuda")
 
     import cv2
@@ -218,4 +227,3 @@ if __name__ == "__main__":
         if cv2.waitKey() == 27:
             break
     ...
-

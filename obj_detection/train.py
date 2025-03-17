@@ -138,15 +138,13 @@ def train(
             output = cnn(imgs)
 
             (position_loss, obj_detection_loss, classification_loss) = (
-                model.calc_obj_detection_loss(
+                model.obj_detection_loss(
                     output,
                     anns,
-                    class_loss,
+                    cnn.output.anchors,
                     coordinates_gain=coordinates_loss_gain,
                     classification_gain=classification_loss_gain,
-                    obj_gain=obj_loss_gain,
                     no_obj_gain=no_obj_loss_gain,
-                    parallel=False,
                 )
             )
 
