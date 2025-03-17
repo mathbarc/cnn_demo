@@ -1,6 +1,5 @@
 import os
 
-from mlflow import data
 from pycocotools.coco import COCO
 
 import torch
@@ -12,8 +11,6 @@ from torchvision.io import read_image
 from torchvision.transforms.v2.functional import grayscale_to_rgb
 
 import random
-import time
-
 
 import numpy
 import cv2
@@ -42,11 +39,6 @@ class CocoDataset(Dataset):
 
         if download_before:
             self._coco.download(self.image_folder, self.img_ids)
-
-    def select_images_with_n_anotations(self, n):
-        self.img_ids = [
-            img for img in self._coco.imgs if len(self._coco.imgToAnns[img]) == n
-        ]
 
     def get_categories_count(self):
         return len(self._label_dict)

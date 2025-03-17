@@ -192,12 +192,8 @@ def generate_target_from_anotation(annotations, grid_size, anchors: torch.Tensor
                     best_iou = iou
                     best_anchor = i
 
-            target_tensor[best_anchor, grid_y, grid_x, 0] = (
-                x_center * grid_size[2] - grid_x
-            )
-            target_tensor[best_anchor, grid_y, grid_x, 1] = (
-                y_center * grid_size[1] - grid_y
-            )
+            target_tensor[best_anchor, grid_y, grid_x, 0] = x_center
+            target_tensor[best_anchor, grid_y, grid_x, 1] = y_center
             target_tensor[best_anchor, grid_y, grid_x, 2] = width
             target_tensor[best_anchor, grid_y, grid_x, 3] = height
             target_tensor[best_anchor, grid_y, grid_x, 4] = 1
@@ -208,7 +204,7 @@ def generate_target_from_anotation(annotations, grid_size, anchors: torch.Tensor
 
 def create_annotations_batch(detections, annotations, anchors) -> torch.Tensor:
 
-    target = None
+    target = torch.zeros(detections.shape)
     with torch.no_grad():
         n_batches = detections.shape[0]
         grid_size = (
@@ -219,14 +215,9 @@ def create_annotations_batch(detections, annotations, anchors) -> torch.Tensor:
         )
 
         for batch_id in range(n_batches):
-            t = generate_target_from_anotation(
+            target[batch_id] = generate_target_from_anotation(
                 annotations[batch_id], grid_size, anchors
             )
-            t = torch.unsqueeze(t, 0)
-            if target is not None:
-                target = torch.concatenate([target, t])
-            else:
-                target = t
     return target
 
 
@@ -239,6 +230,7 @@ def obj_detection_loss(
     no_obj_gain: float = 0.5,
 ):
 
+    n_batches = detections.shape[0]
     target = create_annotations_batch(detections, annotations, anchors)
     target = target.to(detections.device)
 
@@ -253,18 +245,28 @@ def obj_detection_loss(
     target_cls = target[..., 5:]
     target_cls = torch.permute(target_cls, (0, 4, 1, 2, 3))
 
-    coordinates_loss = coordinates_gain * torch.sum(
-        target_obj
-        * torch.nn.functional.mse_loss(det_boxes, target_boxes, reduction="none")
+    coordinates_loss = coordinates_gain * torch.mean(
+        torch.sum(
+            target_obj
+            * torch.nn.functional.mse_loss(det_boxes, target_boxes, reduction="none"),
+            (1, 2, 3, 4),
+        )
     )
 
-    conf_obj_loss = torch.sum(
-        target_obj * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none")
+    conf_obj_loss = torch.mean(
+        torch.sum(
+            target_obj
+            * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none"),
+            (1, 2, 3, 4),
+        )
     )
 
-    conf_noobj_loss = torch.sum(
-        (1 - target_obj)
-        * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none")
+    conf_noobj_loss = torch.mean(
+        torch.sum(
+            (1 - target_obj)
+            * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none"),
+            (1, 2, 3, 4),
+        )
     )
 
     obj_loss = conf_obj_loss + no_obj_gain * conf_noobj_loss
@@ -272,7 +274,9 @@ def obj_detection_loss(
     cls_err = torch.nn.functional.cross_entropy(det_cls, target_cls, reduction="none")
     cls_err = torch.unsqueeze(cls_err, -1)
 
-    cls_loss = classification_gain * torch.sum(target_obj * cls_err)
+    cls_loss = classification_gain * torch.mean(
+        torch.sum(target_obj * cls_err, (1, 2, 3, 4))
+    )
 
     return coordinates_loss, obj_loss, cls_loss
 
