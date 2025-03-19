@@ -146,8 +146,10 @@ class YoloV2(torch.nn.Module):
             opset_version=11,
             # dynamic_axes=dynamic_params
         )
-
-        mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
+        try:
+            mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
+        except:
+            print("skipping model log")
 
 
 def compute_iou(anchor_w, anchor_h, bbox_w, bbox_h):

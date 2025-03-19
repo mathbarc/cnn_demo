@@ -19,13 +19,13 @@ if __name__ == "__main__":
         "/data/ssd1/Datasets/Coco/annotations/instances_val2017.json",
     )
 
-    dataloader = data_loader.ObjDetectionDataLoader(dataset, 32, 368, 512)
+    dataloader = data_loader.ObjDetectionDataLoader(dataset, 64, 368, 512, True)
 
-    cnn = model.YoloV2(3, dataset.get_categories_count(), dataset.compute_anchors(4))
+    cnn = model.YoloV2(3, dataset.get_categories_count(), dataset.compute_anchors(9))
 
-    lr = 1e-3
-    lr_rampup_period = 500
-    epochs = 10
+    lr = 1e-8
+    lr_rampup_period = 1000
+    epochs = 100
     obj_loss_gain = 1.0
     no_obj_loss_gain = 0.5
     classification_loss_gain = 1.0
@@ -40,7 +40,7 @@ if __name__ == "__main__":
             5 * len(dataloader): 1e-5,
             8 * len(dataloader): 1e-6,
         },
-        1e-2,
+        1e-3,
         lr_rampup_period,
         1e-8,
     )

@@ -158,7 +158,7 @@ def train(
             optimizer.step()
             scheduler.step()
 
-            if batch_counter % 100 == 99:
+            if batch_counter % 500 == 499:
                 cnn.save_model("last", device=device)
 
             if batch_counter % 10 == 0:
@@ -169,8 +169,10 @@ def train(
                     "object_presence_loss": obj_detection_loss.item(),
                     "lr": optimizer.param_groups[0]["lr"],
                 }
-
-                mlflow.log_metrics(metrics, batch_counter)
+                try:
+                    mlflow.log_metrics(metrics, batch_counter)
+                except:
+                    print("skipping metrics log")
 
             batch_counter += 1
 
@@ -179,7 +181,10 @@ def train(
         performance_metrics = calculate_metrics(cnn, validation_dataset, device)
 
         metrics = {"valid_map": performance_metrics}
-        mlflow.log_metrics(metrics, batch_counter)
+        try:
+            mlflow.log_metrics(metrics, batch_counter)
+        except:
+            print("skipping validation log")
 
         if best_map < performance_metrics:
             best_map = performance_metrics

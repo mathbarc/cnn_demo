@@ -24,7 +24,7 @@ def softmax(data):
 if __name__ == "__main__":
     # net = cv2.dnn.readNetFromONNX("yolo11n.onnx")
     # net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
-    net = cv2.dnn.readNetFromONNX("last.onnx")
+    net = cv2.dnn.readNetFromONNX("test.onnx")
     # net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
     # net = cv2.dnn.readNetFromTorch("obj_det.pt")
     # net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")

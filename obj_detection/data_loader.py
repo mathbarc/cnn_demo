@@ -115,15 +115,30 @@ class CocoDataset(Dataset):
 
 
 class ObjDetectionDataLoader:
-    def __init__(self, objDetectionDataset, batch_size, min_input_size, max_input_size):
+    def __init__(
+        self,
+        objDetectionDataset,
+        batch_size,
+        min_input_size,
+        max_input_size,
+        random_batch: bool = False,
+    ):
         self.objDetectionDataset = objDetectionDataset
         self.batch_size = batch_size
         self.min_input_size = min_input_size
         self.max_input_size = max_input_size
+        self.random_batch = False
 
     def __iter__(self):
-        self.order = [i for i in range(len(self.objDetectionDataset))]
-        random.shuffle(self.order)
+
+        if self.random_batch:
+            self.order = [
+                random.uniform(0, len(self.objDetectionDataset))
+                for i in range(len(self.objDetectionDataset))
+            ]
+        else:
+            self.order = [i for i in range(len(self.objDetectionDataset))]
+            random.shuffle(self.order)
         self.iteration_size = random.randint(self.min_input_size, self.max_input_size)
         self.iteration_transform = torchvision.transforms.Resize(
             (self.iteration_size, self.iteration_size)
