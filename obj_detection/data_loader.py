@@ -127,13 +127,13 @@ class ObjDetectionDataLoader:
         self.batch_size = batch_size
         self.min_input_size = min_input_size
         self.max_input_size = max_input_size
-        self.random_batch = False
+        self.random_batch = random_batch
 
     def __iter__(self):
 
         if self.random_batch:
             self.order = [
-                random.uniform(0, len(self.objDetectionDataset))
+                random.randint(0, len(self.objDetectionDataset) - 1)
                 for i in range(len(self.objDetectionDataset))
             ]
         else:
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     anchors = dataset.compute_anchors(6)
     print(anchors)
 
-    dataloader = ObjDetectionDataLoader(dataset, 1, 368, 512)
+    dataloader = ObjDetectionDataLoader(dataset, 16, 368, 512, True)
 
     print(
         dataset.get_categories_count(),
@@ -217,7 +217,7 @@ if __name__ == "__main__":
 
     for img, ann in dataloader:
         img = img.squeeze()
-        img = img.permute(1, 2, 0).numpy()
+        img = img[0].permute(1, 2, 0).numpy()
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
         boxes = ann[0]["boxes"]
