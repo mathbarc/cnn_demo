@@ -128,7 +128,6 @@ class YoloV2(torch.nn.Module):
         return o1
 
     def save_model(self, name: str = "yolov2", input_size=(416, 416), device=None):
-        mlflow.pytorch.log_model(self, name, extra_files=[__file__])
 
         input_sample = torch.ones((1, 3, input_size[1], input_size[0]))
         if device is not None:
@@ -147,6 +146,7 @@ class YoloV2(torch.nn.Module):
             # dynamic_axes=dynamic_params
         )
         try:
+            mlflow.pytorch.log_model(self, name, extra_files=[__file__])
             mlflow.log_artifact(model_file_name, f"onnx/{model_file_name}")
         except:
             print("skipping model log")
@@ -223,6 +223,36 @@ def create_annotations_batch(detections, annotations, anchors) -> torch.Tensor:
     return target
 
 
+def box_iou(detection, target):
+    area1 = detection[..., 2] * detection[..., 3]
+    area2 = target[..., 2] * target[..., 3]
+
+    det_x_min = detection[..., 0] - detection[..., 2] * 0.5
+    det_x_max = detection[..., 0] + detection[..., 2] * 0.5
+    target_x_min = target[..., 0] - target[..., 2] * 0.5
+    target_x_max = target[..., 0] + target[..., 2] * 0.5
+
+    det_y_min = detection[..., 1] - detection[..., 3] * 0.5
+    det_y_max = detection[..., 1] + detection[..., 3] * 0.5
+    target_y_min = target[..., 1] - target[..., 3] * 0.5
+    target_y_max = target[..., 1] + target[..., 3] * 0.5
+
+    left = torch.maximum(det_x_min, target_x_min)
+    top = torch.maximum(det_y_min, target_y_min)
+
+    right = torch.minimum(det_x_max, target_x_max)
+    bottom = torch.minimum(det_y_max, target_y_max)
+
+    w = (right - left).clamp(min=0)
+    h = (bottom - top).clamp(min=0)
+
+    inter = w * h  # [N,M]
+
+    union = area1 + area2 - inter
+
+    return torch.div(inter, union)
+
+
 def obj_detection_loss(
     detections: torch.Tensor,
     annotations,
@@ -242,6 +272,74 @@ def obj_detection_loss(
     target_boxes = target[..., :4]
     target_obj = target[..., 4:5]
     target_cls = target[..., 5:]
+
+    iou = box_iou(det_boxes, target_boxes)
+    ignore_iou_mask = iou < 0.2
+
+    target_obj[ignore_iou_mask] = 0
+
+    coordinates_loss = coordinates_gain * torch.sum(
+        target_obj
+        * torch.nn.functional.mse_loss(det_boxes, target_boxes, reduction="none"),
+    )
+
+    conf_obj_loss = torch.sum(
+        target_obj
+        * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none"),
+    )
+
+    conf_noobj_loss = torch.sum(
+        (1 - target_obj)
+        * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none"),
+    )
+
+    obj_loss = conf_obj_loss + no_obj_gain * conf_noobj_loss
+
+    use_binary_cross_entropy = False
+
+    if use_binary_cross_entropy:
+        cls_err = torch.nn.functional.binary_cross_entropy(
+            det_cls, target_cls, reduction="none"
+        )
+        cls_err = torch.sum(cls_err, 4, keepdim=True)
+    else:
+        det_cls = torch.permute(det_cls, (0, 4, 1, 2, 3))
+        target_cls = torch.permute(target_cls, (0, 4, 1, 2, 3))
+        cls_err = torch.nn.functional.cross_entropy(
+            det_cls, target_cls, reduction="none"
+        ).unsqueeze(-1)
+
+    cls_loss = classification_gain * torch.sum(
+        target_obj * cls_err,
+    )
+
+    return coordinates_loss, obj_loss, cls_loss
+
+
+def obj_detection_loss_with_batch_mean(
+    detections: torch.Tensor,
+    annotations,
+    anchors,
+    coordinates_gain: float = 1.0,
+    classification_gain: float = 1.0,
+    no_obj_gain: float = 0.5,
+):
+
+    target = create_annotations_batch(detections, annotations, anchors)
+    target = target.to(detections.device)
+
+    det_boxes = detections[..., :4]
+    det_obj = detections[..., 4:5]
+    det_cls = detections[..., 5:]
+
+    target_boxes = target[..., :4]
+    target_obj = target[..., 4:5]
+    target_cls = target[..., 5:]
+
+    iou = box_iou(det_boxes, target_boxes)
+    ignore_iou_mask = iou < 0.2
+
+    target_obj[ignore_iou_mask] = 0
 
     coordinates_loss = coordinates_gain * torch.mean(
         torch.sum(
@@ -269,14 +367,25 @@ def obj_detection_loss(
 
     obj_loss = conf_obj_loss + no_obj_gain * conf_noobj_loss
 
-    cls_err = torch.nn.functional.binary_cross_entropy(
-        det_cls, target_cls, reduction="none"
-    )
+    use_binary_cross_entropy = False
 
-    cls_err = torch.sum(cls_err, 4, keepdim=True)
+    if use_binary_cross_entropy:
+        cls_err = torch.nn.functional.binary_cross_entropy(
+            det_cls, target_cls, reduction="none"
+        )
+        cls_err = torch.sum(cls_err, 4, keepdim=True)
+    else:
+        det_cls = torch.permute(det_cls, (0, 4, 1, 2, 3))
+        target_cls = torch.permute(target_cls, (0, 4, 1, 2, 3))
+        cls_err = torch.nn.functional.cross_entropy(
+            det_cls, target_cls, reduction="none"
+        ).unsqueeze(-1)
 
     cls_loss = classification_gain * torch.mean(
-        torch.sum(target_obj * cls_err, (1, 2, 3, 4))
+        torch.sum(
+            target_obj * cls_err,
+            (1, 2, 3, 4),
+        )
     )
 
     return coordinates_loss, obj_loss, cls_loss

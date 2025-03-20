@@ -139,14 +139,17 @@ class ObjDetectionDataLoader:
         else:
             self.order = [i for i in range(len(self.objDetectionDataset))]
             random.shuffle(self.order)
-        self.iteration_size = random.randint(self.min_input_size, self.max_input_size)
-        self.iteration_transform = torchvision.transforms.Resize(
-            (self.iteration_size, self.iteration_size)
-        )
 
         self.position = 0
 
         return self
+
+    def _change_input_size(self):
+        iteration_size = random.randint(self.min_input_size, self.max_input_size)
+        self.iteration_transform = torchvision.transforms.Resize(
+            (iteration_size, iteration_size)
+        )
+        print(f"changing input to size: ({iteration_size}, {iteration_size})")
 
     @staticmethod
     def _grayscale_to_rgb(tensor: torch.Tensor) -> torch.Tensor:
@@ -168,6 +171,10 @@ class ObjDetectionDataLoader:
                 raise StopIteration
 
             end = min(self.position + self.batch_size, datasetSize)
+
+            n_batch = int(start / self.batch_size)
+            if n_batch % 500 == 0:
+                self._change_input_size()
 
             annotations = []
 

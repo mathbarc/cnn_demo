@@ -23,11 +23,14 @@ def softmax(data):
 
 if __name__ == "__main__":
     # net = cv2.dnn.readNetFromONNX("yolo11n.onnx")
-    # net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
-    net = cv2.dnn.readNetFromONNX("test.onnx")
+    net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
+    # net = cv2.dnn.readNetFromONNX("last.onnx")
     # net = cv2.dnn.readNetFromONNX("obj_detection_last.onnx")
     # net = cv2.dnn.readNetFromTorch("obj_det.pt")
     # net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")
+
+    obj_threshold = 0.2
+    nms_threshold = 0.4
 
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
     net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
@@ -191,7 +194,7 @@ if __name__ == "__main__":
             classes.append(cl)
             prob.append(output[b, 4])
 
-        indexes = cv2.dnn.NMSBoxes(boxes, prob, 0.4, 0.4)
+        indexes = cv2.dnn.NMSBoxes(boxes, prob, obj_threshold, nms_threshold)
         finished_output_postprocess = time.time()
 
         for box_id in indexes:
