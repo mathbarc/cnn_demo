@@ -140,6 +140,7 @@ class ObjDetectionDataLoader:
             self.order = [i for i in range(len(self.objDetectionDataset))]
             random.shuffle(self.order)
 
+        self._change_input_size()
         self.position = 0
 
         return self
@@ -172,9 +173,9 @@ class ObjDetectionDataLoader:
 
             end = min(self.position + self.batch_size, datasetSize)
 
-            n_batch = int(start / self.batch_size)
-            if n_batch % 500 == 0:
-                self._change_input_size()
+            # n_batch = int(start / self.batch_size)
+            # if n_batch % 500 == 0:
+            #     self._change_input_size()
 
             annotations = []
 
