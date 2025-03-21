@@ -19,28 +19,27 @@ if __name__ == "__main__":
         "/data/ssd1/Datasets/Coco/annotations/instances_val2017.json",
     )
 
-    dataloader = data_loader.ObjDetectionDataLoader(dataset, 64, 368, 512, True)
+    dataloader = data_loader.ObjDetectionDataLoader(dataset, 64, 368, 512)
 
-    cnn = model.YoloV2(3, dataset.get_categories_count(), dataset.compute_anchors(9))
+    cnn = model.YoloV2(3, dataset.get_categories_count(), dataset.compute_anchors(5))
 
-    lr = 1e-8
-    lr_rampup_period = 200
-    epochs = 100
+    lr = 1e-4
+    lr_rampup_period = 100
+    epochs = 8
     obj_loss_gain = 1.0
     no_obj_loss_gain = 0.5
-    classification_loss_gain = 1.0
-    coordinates_loss_gain = 1.0
+    classification_loss_gain = 1
+    coordinates_loss_gain = 1
 
     optimizer = torch.optim.SGD(cnn.parameters(), lr, momentum=9e-1, weight_decay=5e-4)
     scheduler = YoloObjDetectionRampUpLR(
         optimizer,
         {
-            200: 1e-3,
-            500: 1e-4,
-            2 * len(dataloader): 1e-5,
-            4 * len(dataloader): 1e-6,
+            10 * len(dataloader): 1e-5,
+            50 * len(dataloader): 1e-6,
+            80 * len(dataloader): 1e-7,
         },
-        1e-3,
+        lr,
         lr_rampup_period,
         1e-8,
     )
