@@ -64,7 +64,8 @@ class YoloOutput(torch.nn.Module):
         h = (anchors_tiled[:, 1] * torch.exp(grid[:, :, 3])).unsqueeze(2)
 
         obj = torch.sigmoid(grid[:, :, 4]).unsqueeze(2)
-        classes = torch.sigmoid(grid[:, :, 5:])
+        # classes = torch.sigmoid(grid[:, :, 5:])
+        classes = torch.softmax(grid[:, :, 5:], dim=2)
 
         final_boxes = torch.cat((x, y, w, h, obj, classes), dim=2)
 
@@ -160,7 +161,7 @@ def compute_iou(anchor_w, anchor_h, bbox_w, bbox_h):
     anchor_area = anchor_w * anchor_h
     bbox_area = bbox_w * bbox_h
 
-    union_area = anchor_area + bbox_area - intersection_area
+    union_area = (anchor_area + bbox_area - intersection_area).clamp(min=1e-8)
 
     iou = intersection_area / union_area
     return iou
@@ -246,9 +247,9 @@ def box_iou(detection, target):
     w = (right - left).clamp(min=0)
     h = (bottom - top).clamp(min=0)
 
-    inter = w * h  # [N,M]
+    inter = w * h
 
-    union = area1 + area2 - inter
+    union = (area1 + area2 - inter).clamp(min=1e-8)
 
     return torch.div(inter, union)
 
@@ -259,6 +260,7 @@ def obj_detection_loss(
     anchors,
     coordinates_gain: float = 1.0,
     classification_gain: float = 1.0,
+    obj_gain: float = 1.0,
     no_obj_gain: float = 0.5,
 ):
 
@@ -275,7 +277,6 @@ def obj_detection_loss(
 
     iou = box_iou(det_boxes, target_boxes)
     ignore_iou_mask = iou < 0.2
-
     target_obj[ignore_iou_mask] = 0
 
     coordinates_loss = coordinates_gain * torch.sum(
@@ -293,7 +294,7 @@ def obj_detection_loss(
         * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none"),
     )
 
-    obj_loss = conf_obj_loss + no_obj_gain * conf_noobj_loss
+    obj_loss = obj_gain * conf_obj_loss + no_obj_gain * conf_noobj_loss
 
     use_binary_cross_entropy = False
 
