@@ -1,20 +1,45 @@
 import os
+import random
 
-from pycocotools.coco import COCO
-
+import cv2
+import numpy
 import torch
 import torch.utils
 import torchvision
+from matplotlib import pyplot as plt
+from pycocotools.coco import COCO
 from torch.utils.data import Dataset
-from torchvision.transforms.functional import resize
 from torchvision.io import read_image
+from torchvision.transforms.functional import resize
 from torchvision.transforms.v2.functional import grayscale_to_rgb
 
-import random
 
-import numpy
-import cv2
-from matplotlib import pyplot as plt
+def calculate_anchors(dataset, n_anchors: int):
+    data = []
+
+    for i in range(len(dataset)):
+        anns, img_sz = dataset.get_annotation(i)
+
+        boxes = [
+            [
+                (ann["bbox"][2] / img_sz[0]),
+                (ann["bbox"][3] / img_sz[1]),
+            ]
+            for ann in anns
+        ]
+
+        data.extend(boxes)
+
+    data = numpy.array(data, copy=False).astype(numpy.float32)
+    # define criteria and apply kmeans()
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+    _, _, center = cv2.kmeans(
+        data, n_anchors, None, criteria, 10, cv2.KMEANS_PP_CENTERS
+    )
+
+    anchors = center.tolist()
+    anchors.sort()
+    return anchors
 
 
 class CocoDataset(Dataset):
@@ -71,6 +96,13 @@ class CocoDataset(Dataset):
         anchors = center.tolist()
         anchors.sort()
         return anchors
+
+    def get_annotation(self, index: int):
+        img_id = self.img_ids[index]
+        coco_img = self._coco.imgs[img_id]
+        list_coco_ann = self._coco.getAnnIds(img_id)
+        coco_ann = self._coco.loadAnns(list_coco_ann)
+        return coco_ann, (coco_img["width"], coco_img["height"])
 
     def __getitem__(self, index):
         img_id = self.img_ids[index]

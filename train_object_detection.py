@@ -1,3 +1,4 @@
+import logging
 import torch
 from obj_detection import train, model, data_loader
 from obj_detection.lr_functions import (
@@ -10,18 +11,26 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
+    logging.info("Loading Training set ")
     dataset = data_loader.CocoDataset(
-        "/data/ssd1/Datasets/Coco/train2017",
-        "/data/ssd1/Datasets/Coco/annotations/instances_train2017.json",
+        "/data/Datasets/coco_dataset/2017/train2017",
+        "/data/Datasets/coco_dataset/2017/annotations/instances_train2017.json",
     )
+    logging.info("Loading validation set ")
     validation_dataset = data_loader.CocoDataset(
-        "/data/ssd1/Datasets/Coco/val2017",
-        "/data/ssd1/Datasets/Coco/annotations/instances_val2017.json",
+        "/data/Datasets/coco_dataset/2017/val2017",
+        "/data/Datasets/coco_dataset/2017/annotations/instances_val2017.json",
     )
 
+    logging.info("Creating data loader for training set")
     dataloader = data_loader.ObjDetectionDataLoader(dataset, 64, 368, 512)
 
-    cnn = model.YoloV2(3, dataset.get_categories_count(), dataset.compute_anchors(5))
+    n_anchors = 5
+    logging.info("Calculating anchors ... {n_anchors}")
+    anchors = data_loader.calculate_anchors(dataset, n_anchors)
+    logging.info(f"Found anchors: {anchors}")
+
+    cnn = model.YoloV2(3, dataset.get_categories_count(), anchors)
 
     lr = 1e-4
     lr_rampup_period = 1000
