@@ -262,22 +262,23 @@ def obj_detection_loss(
     classification_gain: float = 1.0,
     obj_gain: float = 1.0,
     no_obj_gain: float = 0.5,
+    ignore_obj_thr: float = 0.2,
 ):
-
-    target = create_annotations_batch(detections, annotations, anchors)
-    target = target.to(detections.device)
 
     det_boxes = detections[..., :4]
     det_obj = detections[..., 4:5]
     det_cls = detections[..., 5:]
 
-    target_boxes = target[..., :4]
-    target_obj = target[..., 4:5]
-    target_cls = target[..., 5:]
+    with torch.no_grad():
+        target = create_annotations_batch(detections, annotations, anchors)
+        target = target.to(detections.device)
+        target_boxes = target[..., :4]
+        target_obj = target[..., 4:5]
+        target_cls = target[..., 5:]
 
-    iou = box_iou(det_boxes, target_boxes)
-    ignore_iou_mask = iou < 0.5
-    target_obj[ignore_iou_mask] = 0
+        iou = box_iou(det_boxes, target_boxes)
+        ignore_iou_mask = iou < ignore_obj_thr
+        target_obj[ignore_iou_mask] = 0
 
     coordinates_loss = coordinates_gain * torch.sum(
         target_obj
