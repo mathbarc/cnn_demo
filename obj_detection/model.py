@@ -297,7 +297,7 @@ def obj_detection_loss(
 
     obj_loss = (obj_gain * conf_obj_loss) + (no_obj_gain * conf_noobj_loss)
 
-    use_binary_cross_entropy = True
+    use_binary_cross_entropy = False
 
     if use_binary_cross_entropy:
         cls_err = torch.nn.functional.binary_cross_entropy(

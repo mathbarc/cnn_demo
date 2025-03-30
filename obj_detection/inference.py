@@ -29,7 +29,7 @@ if __name__ == "__main__":
     # net = cv2.dnn.readNetFromTorch("obj_det.pt")
     # net = cv2.dnn.readNetFromDarknet("yolov2-tiny.cfg","yolov2-tiny.weights")
 
-    obj_threshold = 0.2
+    obj_threshold = 0.4
     nms_threshold = 0.4
 
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
@@ -143,7 +143,7 @@ if __name__ == "__main__":
     ]
 
     # folder = "/data/hd1/Dataset/leafs/images/"
-    folder = "/data/ssd1/Datasets/Coco/test2017/"
+    folder = "/data/ssd1/Datasets_old/Coco/test2017/"
     output_folder = "./inference_results"
 
     os.makedirs(output_folder, exist_ok=True)
