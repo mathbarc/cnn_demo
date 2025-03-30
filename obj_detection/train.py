@@ -93,15 +93,9 @@ def train(
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ):
     cnn = cnn.to(device)
-
-    if dataloader.objDetectionDataset.get_categories_count() > 1:
-        class_loss = torch.nn.functional.binary_cross_entropy
-    else:
-        class_loss = torch.nn.functional.mse_loss
-
     best_map = 0
 
-    mlflow.set_tracking_uri("http://mlflow.solv.local/")
+    # mlflow.set_tracking_uri("http://mlflow.solv.local/")
     experiment = mlflow.get_experiment_by_name("Object Detection")
     if experiment is None:
         experiment_id = mlflow.create_experiment("Object Detection")
