@@ -280,10 +280,20 @@ def obj_detection_loss(
         ignore_iou_mask = iou < ignore_obj_thr
         target_obj[ignore_iou_mask] = 0
 
-    coordinates_loss = coordinates_gain * torch.sum(
-        target_obj
-        * torch.nn.functional.mse_loss(det_boxes, target_boxes, reduction="none"),
-    )
+    use_complete_box_iou_loss = True
+    if use_complete_box_iou_loss:
+        coordinates_xyxy = torchvision.ops.box_convert(det_boxes, "cxcywh", "xyxy")
+        with torch.no_grad():
+            target_xyxy = torchvision.ops.box_convert(target_boxes, "cxcywh", "xyxy")
+        coordinates_loss = torchvision.ops.generalized_box_iou_loss(
+            coordinates_xyxy, target_xyxy, reduction="none"
+        ).unsqueeze(-1)
+    else:
+        coordinates_loss = torch.nn.functional.mse_loss(
+            det_boxes, target_boxes, reduction="none"
+        )
+
+    coordinates_loss = coordinates_gain * torch.nansum(target_obj * coordinates_loss)
 
     conf_obj_loss = torch.sum(
         target_obj
@@ -297,13 +307,13 @@ def obj_detection_loss(
 
     obj_loss = (obj_gain * conf_obj_loss) + (no_obj_gain * conf_noobj_loss)
 
-    use_binary_cross_entropy = False
+    use_binary_cross_entropy = True
 
     if use_binary_cross_entropy:
         cls_err = torch.nn.functional.binary_cross_entropy(
             det_cls, target_cls, reduction="none"
         )
-        cls_err = torch.mean(cls_err, 4, keepdim=True)
+        cls_err = torch.sum(cls_err, 4, keepdim=True)
     else:
         det_cls = torch.permute(det_cls, (0, 4, 1, 2, 3))
         target_cls = torch.permute(target_cls, (0, 4, 1, 2, 3))
