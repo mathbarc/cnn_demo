@@ -32,7 +32,8 @@ if __name__ == "__main__":
 
     cnn = model.YoloV2(3, dataset.get_categories_count(), anchors)
 
-    lr = 1e-4
+    lr = 1e-3
+    start_lr = 1e-8
     lr_rampup_period = 1000
     epochs = 100
     obj_loss_gain = 5.0
@@ -41,18 +42,18 @@ if __name__ == "__main__":
     coordinates_loss_gain = 1.0
 
     optimizer = torch.optim.SGD(
-        cnn.parameters(), 1e-8, momentum=9e-1, weight_decay=5e-4
+        cnn.parameters(), start_lr, momentum=9e-1, weight_decay=5e-4
     )
     scheduler = YoloObjDetectionRampUpLR(
         optimizer,
         {
-            20 * len(dataloader): 1e-4,
-            50 * len(dataloader): 1e-5,
-            80 * len(dataloader): 1e-6,
+            lr_rampup_period: 1e-3,
+            200 * len(dataloader): 1e-4,
+            250 * len(dataloader): 1e-5,
         },
         lr,
         lr_rampup_period,
-        1e-8,
+        start_lr,
     )
 
     train.train(
