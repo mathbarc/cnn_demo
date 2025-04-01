@@ -285,15 +285,16 @@ def obj_detection_loss(
         coordinates_xyxy = torchvision.ops.box_convert(det_boxes, "cxcywh", "xyxy")
         with torch.no_grad():
             target_xyxy = torchvision.ops.box_convert(target_boxes, "cxcywh", "xyxy")
-        coordinates_loss = torchvision.ops.generalized_box_iou_loss(
+        coordinates_loss = torchvision.ops.distance_box_iou_loss(
             coordinates_xyxy, target_xyxy, reduction="none"
         ).unsqueeze(-1)
     else:
         coordinates_loss = torch.nn.functional.mse_loss(
             det_boxes, target_boxes, reduction="none"
         )
+        coordinates_loss = torch.sum(coordinates_loss, dim=-1, keepdim=True)
 
-    coordinates_loss = coordinates_gain * torch.nansum(target_obj * coordinates_loss)
+    coordinates_loss = coordinates_gain * torch.sum(target_obj * coordinates_loss)
 
     conf_obj_loss = torch.sum(
         target_obj
@@ -307,7 +308,7 @@ def obj_detection_loss(
 
     obj_loss = (obj_gain * conf_obj_loss) + (no_obj_gain * conf_noobj_loss)
 
-    use_binary_cross_entropy = True
+    use_binary_cross_entropy = False
 
     if use_binary_cross_entropy:
         cls_err = torch.nn.functional.binary_cross_entropy(
