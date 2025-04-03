@@ -64,8 +64,8 @@ class YoloOutput(torch.nn.Module):
         h = (anchors_tiled[:, 1] * torch.exp(grid[:, :, 3])).unsqueeze(2)
 
         obj = torch.sigmoid(grid[:, :, 4]).unsqueeze(2)
-        # classes = torch.sigmoid(grid[:, :, 5:])
-        classes = torch.softmax(grid[:, :, 5:], dim=2)
+        classes = torch.sigmoid(grid[:, :, 5:])
+        # classes = torch.softmax(grid[:, :, 5:], dim=2)
 
         final_boxes = torch.cat((x, y, w, h, obj, classes), dim=2)
 
@@ -277,9 +277,9 @@ def obj_detection_loss(
         target_obj = target[..., 4:5]
         target_cls = target[..., 5:]
 
-        # iou = box_iou(det_boxes, target_boxes)
-        # ignore_iou_mask = iou < ignore_obj_thr
-        # target_obj[ignore_iou_mask] = 0
+        iou = box_iou(det_boxes, target_boxes)
+        ignore_iou_mask = iou < ignore_obj_thr
+        target_obj[ignore_iou_mask] = 0
 
     use_complete_box_iou_loss = True
     if use_complete_box_iou_loss:
@@ -306,7 +306,7 @@ def obj_detection_loss(
 
     obj_loss = (obj_gain * conf_obj_loss) + (no_obj_gain * conf_noobj_loss)
 
-    use_binary_cross_entropy = False
+    use_binary_cross_entropy = True
 
     if use_binary_cross_entropy:
         cls_err = torch.nn.functional.binary_cross_entropy(
