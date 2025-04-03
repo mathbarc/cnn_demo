@@ -140,7 +140,7 @@ def train(
                     classification_gain=classification_loss_gain,
                     obj_gain=obj_loss_gain,
                     no_obj_gain=no_obj_loss_gain,
-                    ignore_obj_thr=0.0,
+                    ignore_obj_thr=0.5,
                 )
             )
 

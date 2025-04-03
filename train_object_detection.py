@@ -33,11 +33,12 @@ if __name__ == "__main__":
     cnn = model.YoloV2(3, dataset.get_categories_count(), anchors)
 
     lr = 1e-3
+    peak_lr = 1e-3
     start_lr = 1e-8
     lr_rampup_period = 1000
     epochs = 100
-    obj_loss_gain = 5.0
-    no_obj_loss_gain = 1.0
+    obj_loss_gain = 1.0
+    no_obj_loss_gain = 0.5
     classification_loss_gain = 1.0
     coordinates_loss_gain = 1.0
 
@@ -47,11 +48,11 @@ if __name__ == "__main__":
     scheduler = YoloObjDetectionRampUpLR(
         optimizer,
         {
-            lr_rampup_period: 1e-3,
+            lr_rampup_period: lr,
             200 * len(dataloader): 1e-4,
             250 * len(dataloader): 1e-5,
         },
-        lr,
+        peak_lr,
         lr_rampup_period,
         start_lr,
     )

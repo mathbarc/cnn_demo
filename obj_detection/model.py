@@ -225,18 +225,19 @@ def create_annotations_batch(detections, annotations, anchors) -> torch.Tensor:
 
 
 def box_iou(detection, target):
+
     area1 = detection[..., 2] * detection[..., 3]
-    area2 = target[..., 2] * target[..., 3]
+    det_x_min = detection[..., 0] - (detection[..., 2] * 0.5)
+    det_x_max = detection[..., 0] + (detection[..., 2] * 0.5)
+    det_y_min = detection[..., 1] - (detection[..., 3] * 0.5)
+    det_y_max = detection[..., 1] + (detection[..., 3] * 0.5)
 
-    det_x_min = detection[..., 0] - detection[..., 2] * 0.5
-    det_x_max = detection[..., 0] + detection[..., 2] * 0.5
-    target_x_min = target[..., 0] - target[..., 2] * 0.5
-    target_x_max = target[..., 0] + target[..., 2] * 0.5
-
-    det_y_min = detection[..., 1] - detection[..., 3] * 0.5
-    det_y_max = detection[..., 1] + detection[..., 3] * 0.5
-    target_y_min = target[..., 1] - target[..., 3] * 0.5
-    target_y_max = target[..., 1] + target[..., 3] * 0.5
+    with torch.no_grad():
+        area2 = target[..., 2] * target[..., 3]
+        target_x_min = target[..., 0] - (target[..., 2] * 0.5)
+        target_x_max = target[..., 0] + (target[..., 2] * 0.5)
+        target_y_min = target[..., 1] - (target[..., 3] * 0.5)
+        target_y_max = target[..., 1] + (target[..., 3] * 0.5)
 
     left = torch.maximum(det_x_min, target_x_min)
     top = torch.maximum(det_y_min, target_y_min)
@@ -249,9 +250,9 @@ def box_iou(detection, target):
 
     inter = w * h
 
-    union = (area1 + area2 - inter).clamp(min=1e-8)
+    union = area1 + area2 - inter
 
-    return torch.div(inter, union)
+    return torch.div(inter, union + 1e-8)
 
 
 def obj_detection_loss(
@@ -276,23 +277,20 @@ def obj_detection_loss(
         target_obj = target[..., 4:5]
         target_cls = target[..., 5:]
 
-        iou = box_iou(det_boxes, target_boxes)
-        ignore_iou_mask = iou < ignore_obj_thr
-        target_obj[ignore_iou_mask] = 0
+        # iou = box_iou(det_boxes, target_boxes)
+        # ignore_iou_mask = iou < ignore_obj_thr
+        # target_obj[ignore_iou_mask] = 0
 
     use_complete_box_iou_loss = True
     if use_complete_box_iou_loss:
-        coordinates_xyxy = torchvision.ops.box_convert(det_boxes, "cxcywh", "xyxy")
-        with torch.no_grad():
-            target_xyxy = torchvision.ops.box_convert(target_boxes, "cxcywh", "xyxy")
-        coordinates_loss = torchvision.ops.distance_box_iou_loss(
-            coordinates_xyxy, target_xyxy, reduction="none"
-        ).unsqueeze(-1)
+        coordinates_loss = 1.0 - box_iou(det_boxes, target_boxes).unsqueeze(-1)
     else:
         coordinates_loss = torch.nn.functional.mse_loss(
             det_boxes, target_boxes, reduction="none"
         )
-        coordinates_loss = torch.sum(coordinates_loss, dim=-1, keepdim=True)
+        coordinates_loss = torch.sqrt(
+            torch.sum(coordinates_loss[..., 0:2], dim=-1, keepdim=True)
+        ) + torch.sqrt(torch.sum(coordinates_loss[..., 2:], dim=-1, keepdim=True))
 
     coordinates_loss = coordinates_gain * torch.sum(target_obj * coordinates_loss)
 
@@ -321,6 +319,9 @@ def obj_detection_loss(
         cls_err = torch.nn.functional.cross_entropy(
             det_cls, target_cls, reduction="none"
         ).unsqueeze(-1)
+
+        # cls_err = torch.nn.functional.mse_loss(det_cls, target_cls, reduction="none")
+        # cls_err = torch.sqrt(torch.sum(cls_err, 4, keepdim=True))
 
     cls_loss = classification_gain * torch.sum(
         target_obj * cls_err,
