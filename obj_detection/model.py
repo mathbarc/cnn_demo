@@ -279,7 +279,7 @@ def obj_detection_loss(
         target_obj_filtered = target_obj.clone()
         target_obj_filtered[ignore_iou_mask] = 0
 
-    use_complete_box_iou_loss = True
+    use_complete_box_iou_loss = False
     if use_complete_box_iou_loss:
         coordinates_loss = 1.0 - box_iou(det_boxes, target_boxes).unsqueeze(-1)
 
@@ -296,9 +296,7 @@ def obj_detection_loss(
         )
         coordinates_loss = torch.sqrt(torch.sum(coordinates_loss, dim=-1, keepdim=True))
 
-    coordinates_loss = coordinates_gain * torch.sum(
-        target_obj_filtered * coordinates_loss
-    )
+    coordinates_loss = coordinates_gain * torch.sum(target_obj * coordinates_loss)
 
     conf_obj_loss = torch.sum(
         target_obj_filtered
