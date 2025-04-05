@@ -35,10 +35,10 @@ if __name__ == "__main__":
     lr = 1e-3
     peak_lr = 1e-3
     start_lr = 1e-8
-    lr_rampup_period = 1000
+    lr_rampup_period = 500
     epochs = 100
     obj_loss_gain = 1.0
-    no_obj_loss_gain = 0.5
+    no_obj_loss_gain = 1.0
     classification_loss_gain = 1.0
     coordinates_loss_gain = 1.0
 
@@ -49,8 +49,8 @@ if __name__ == "__main__":
         optimizer,
         {
             lr_rampup_period: lr,
-            200 * len(dataloader): 1e-4,
-            250 * len(dataloader): 1e-5,
+            50 * len(dataloader): 1e-4,
+            80 * len(dataloader): 1e-5,
         },
         peak_lr,
         lr_rampup_period,

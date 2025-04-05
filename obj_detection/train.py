@@ -140,9 +140,13 @@ def train(
                     classification_gain=classification_loss_gain,
                     obj_gain=obj_loss_gain,
                     no_obj_gain=no_obj_loss_gain,
-                    ignore_obj_thr=0.5,
+                    ignore_obj_thr=0.7,
                 )
             )
+
+            # position_loss = torch.div(position_loss, dataloader.batch_size)
+            # obj_detection_loss = torch.div(obj_detection_loss, dataloader.batch_size)
+            # classification_loss = torch.div(classification_loss, dataloader.batch_size)
 
             total_loss = position_loss + obj_detection_loss + classification_loss
             loss = total_loss

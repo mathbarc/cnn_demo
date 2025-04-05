@@ -64,8 +64,8 @@ class YoloOutput(torch.nn.Module):
         h = (anchors_tiled[:, 1] * torch.exp(grid[:, :, 3])).unsqueeze(2)
 
         obj = torch.sigmoid(grid[:, :, 4]).unsqueeze(2)
-        classes = torch.sigmoid(grid[:, :, 5:])
-        # classes = torch.softmax(grid[:, :, 5:], dim=2)
+        # classes = torch.sigmoid(grid[:, :, 5:])
+        classes = torch.softmax(grid[:, :, 5:], dim=2)
 
         final_boxes = torch.cat((x, y, w, h, obj, classes), dim=2)
 
@@ -205,21 +205,17 @@ def generate_target_from_anotation(annotations, grid_size, anchors: torch.Tensor
     return target_tensor
 
 
-def create_annotations_batch(detections, annotations, anchors) -> torch.Tensor:
+def create_annotations_batch(
+    annotations: torch.Tensor, anchors: torch.Tensor, grid_size
+) -> torch.Tensor:
 
-    target = torch.zeros(detections.shape)
+    target = torch.zeros(grid_size)
     with torch.no_grad():
-        n_batches = detections.shape[0]
-        grid_size = (
-            detections.shape[1],
-            detections.shape[2],
-            detections.shape[3],
-            detections.shape[4],
-        )
+        n_batches = grid_size[0]
 
         for batch_id in range(n_batches):
             target[batch_id] = generate_target_from_anotation(
-                annotations[batch_id], grid_size, anchors
+                annotations[batch_id], grid_size[1:], anchors
             )
     return target
 
@@ -248,7 +244,7 @@ def box_iou(detection, target):
     w = (right - left).clamp(min=0)
     h = (bottom - top).clamp(min=0)
 
-    inter = w * h
+    inter = torch.mul(w, h)
 
     union = area1 + area2 - inter
 
@@ -279,34 +275,42 @@ def obj_detection_loss(
 
         iou = box_iou(det_boxes, target_boxes)
         ignore_iou_mask = iou < ignore_obj_thr
-        target_obj[ignore_iou_mask] = 0
+
+        target_obj_filtered = target_obj.clone()
+        target_obj_filtered[ignore_iou_mask] = 0
 
     use_complete_box_iou_loss = True
     if use_complete_box_iou_loss:
         coordinates_loss = 1.0 - box_iou(det_boxes, target_boxes).unsqueeze(-1)
+
+        # coordinates_xyxy = torchvision.ops.box_convert(det_boxes, "cxcywh", "xyxy")
+        # with torch.no_grad():
+        #     target_xyxy = torchvision.ops.box_convert(target_boxes, "cxcywh", "xyxy")
+        # coordinates_loss = torchvision.ops.generalized_box_iou_loss(
+        #     coordinates_xyxy, target_xyxy, reduction="none"
+        # ).unsqueeze(-1)
+
     else:
         coordinates_loss = torch.nn.functional.mse_loss(
             det_boxes, target_boxes, reduction="none"
         )
-        coordinates_loss = torch.sqrt(
-            torch.sum(coordinates_loss[..., 0:2], dim=-1, keepdim=True)
-        ) + torch.sqrt(torch.sum(coordinates_loss[..., 2:], dim=-1, keepdim=True))
+        coordinates_loss = torch.sqrt(torch.sum(coordinates_loss, dim=-1, keepdim=True))
 
     coordinates_loss = coordinates_gain * torch.sum(target_obj * coordinates_loss)
 
     conf_obj_loss = torch.sum(
-        target_obj
-        * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none"),
+        target_obj_filtered
+        * torch.nn.functional.mse_loss(det_obj, target_obj_filtered, reduction="none"),
     )
 
     conf_noobj_loss = torch.sum(
-        (1 - target_obj)
-        * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none"),
+        (1 - target_obj_filtered)
+        * torch.nn.functional.mse_loss(det_obj, target_obj_filtered, reduction="none"),
     )
 
     obj_loss = (obj_gain * conf_obj_loss) + (no_obj_gain * conf_noobj_loss)
 
-    use_binary_cross_entropy = True
+    use_binary_cross_entropy = False
 
     if use_binary_cross_entropy:
         cls_err = torch.nn.functional.binary_cross_entropy(
@@ -324,7 +328,7 @@ def obj_detection_loss(
         # cls_err = torch.sqrt(torch.sum(cls_err, 4, keepdim=True))
 
     cls_loss = classification_gain * torch.sum(
-        target_obj * cls_err,
+        target_obj_filtered * cls_err,
     )
 
     return coordinates_loss, obj_loss, cls_loss
