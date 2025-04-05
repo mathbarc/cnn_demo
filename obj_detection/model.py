@@ -296,7 +296,9 @@ def obj_detection_loss(
         )
         coordinates_loss = torch.sqrt(torch.sum(coordinates_loss, dim=-1, keepdim=True))
 
-    coordinates_loss = coordinates_gain * torch.sum(target_obj * coordinates_loss)
+    coordinates_loss = coordinates_gain * torch.sum(
+        target_obj_filtered * coordinates_loss
+    )
 
     conf_obj_loss = torch.sum(
         target_obj_filtered

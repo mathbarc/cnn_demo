@@ -35,7 +35,7 @@ if __name__ == "__main__":
     lr = 1e-3
     peak_lr = 1e-3
     start_lr = 1e-8
-    lr_rampup_period = 500
+    lr_rampup_period = 1000
     epochs = 100
     obj_loss_gain = 1.0
     no_obj_loss_gain = 1.0
