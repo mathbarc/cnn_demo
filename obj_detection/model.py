@@ -299,13 +299,13 @@ def obj_detection_loss(
     coordinates_loss = coordinates_gain * torch.sum(target_obj * coordinates_loss)
 
     conf_obj_loss = torch.sum(
-        target_obj_filtered
-        * torch.nn.functional.mse_loss(det_obj, target_obj_filtered, reduction="none"),
+        target_obj
+        * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none"),
     )
 
     conf_noobj_loss = torch.sum(
-        (1 - target_obj_filtered)
-        * torch.nn.functional.mse_loss(det_obj, target_obj_filtered, reduction="none"),
+        (1 - target_obj)
+        * torch.nn.functional.mse_loss(det_obj, target_obj, reduction="none"),
     )
 
     obj_loss = (obj_gain * conf_obj_loss) + (no_obj_gain * conf_noobj_loss)
@@ -328,7 +328,7 @@ def obj_detection_loss(
         # cls_err = torch.sqrt(torch.sum(cls_err, 4, keepdim=True))
 
     cls_loss = classification_gain * torch.sum(
-        target_obj_filtered * cls_err,
+        target_obj * cls_err,
     )
 
     return coordinates_loss, obj_loss, cls_loss
