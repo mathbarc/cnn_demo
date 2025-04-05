@@ -267,7 +267,7 @@ def obj_detection_loss(
     det_cls = detections[..., 5:]
 
     with torch.no_grad():
-        target = create_annotations_batch(detections, annotations, anchors)
+        target = create_annotations_batch(annotations, anchors, detections.shape)
         target = target.to(detections.device)
         target_boxes = target[..., :4]
         target_obj = target[..., 4:5]
