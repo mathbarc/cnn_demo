@@ -141,6 +141,7 @@ def train(
                     obj_gain=obj_loss_gain,
                     no_obj_gain=no_obj_loss_gain,
                     ignore_obj_thr=0.7,
+                    filter_iou=batch_counter > lr_rampup_period,
                 )
             )
 
@@ -160,6 +161,7 @@ def train(
 
             if batch_counter % 500 == 499:
                 cnn.save_model("last", device=device)
+                dataloader.change_input_size()
 
             if batch_counter % 10 == 0:
                 metrics = {

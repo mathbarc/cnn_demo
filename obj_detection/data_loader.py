@@ -172,12 +172,12 @@ class ObjDetectionDataLoader:
             self.order = [i for i in range(len(self.objDetectionDataset))]
             random.shuffle(self.order)
 
-        self._change_input_size()
+        self.change_input_size()
         self.position = 0
 
         return self
 
-    def _change_input_size(self):
+    def change_input_size(self):
         iteration_size = random.randint(self.min_input_size, self.max_input_size)
         self.iteration_transform = torchvision.transforms.Resize(
             (iteration_size, iteration_size)
@@ -206,7 +206,7 @@ class ObjDetectionDataLoader:
             end = min(self.position + self.batch_size, datasetSize)
 
             # n_batch = int(start / self.batch_size)
-            # if n_batch % 500 == 0:
+            # if n_batch % 100 == 0:
             #     self._change_input_size()
 
             annotations = []

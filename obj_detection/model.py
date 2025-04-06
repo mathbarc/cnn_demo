@@ -28,7 +28,7 @@ class YoloOutput(torch.nn.Module):
         anchors_data = torch.tensor(anchors, dtype=torch.float32)
         self.anchors = torch.nn.Parameter(
             anchors_data.reshape((anchors_data.size(0), anchors_data.size(1), 1, 1)),
-            requires_grad=True,
+            requires_grad=False,
         )
 
     def forward(self, features: torch.Tensor):
@@ -181,6 +181,16 @@ def generate_target_from_anotation(annotations, grid_size, anchors: torch.Tensor
 
         x_center, y_center, width, height = bbox
 
+        x_min = max(x_center - width / 2.0, 0)
+        x_max = min(x_center + width / 2.0, 1)
+        y_min = max(y_center - height / 2.0, 0)
+        y_max = min(y_center + height / 2.0, 1)
+
+        x_center = (x_min + x_max) / 2.0
+        y_center = (y_min + y_max) / 2.0
+        width = x_max - x_min
+        height = y_max - y_min
+
         grid_x = int(x_center * grid_size[2])
         grid_y = int(y_center * grid_size[1])
 
@@ -260,6 +270,7 @@ def obj_detection_loss(
     obj_gain: float = 1.0,
     no_obj_gain: float = 0.5,
     ignore_obj_thr: float = 0.2,
+    filter_iou: bool = False,
 ):
 
     det_boxes = detections[..., :4]
@@ -273,13 +284,12 @@ def obj_detection_loss(
         target_obj = target[..., 4:5]
         target_cls = target[..., 5:]
 
-        iou = box_iou(det_boxes, target_boxes)
-        ignore_iou_mask = iou < ignore_obj_thr
+        if filter_iou:
+            iou = box_iou(det_boxes, target_boxes)
+            ignore_iou_mask = iou < ignore_obj_thr
+            target_obj[ignore_iou_mask] = 0
 
-        target_obj_filtered = target_obj.clone()
-        target_obj_filtered[ignore_iou_mask] = 0
-
-    use_complete_box_iou_loss = False
+    use_complete_box_iou_loss = True
     if use_complete_box_iou_loss:
         coordinates_loss = 1.0 - box_iou(det_boxes, target_boxes).unsqueeze(-1)
 

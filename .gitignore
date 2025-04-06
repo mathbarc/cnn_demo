@@ -3,3 +3,7 @@
 **/__pycache__
 *.png
 inference_results/
+.venv/
+**.egg-info/
+.coverage
+.pytest_cache/
