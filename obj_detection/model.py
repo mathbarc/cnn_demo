@@ -14,6 +14,7 @@ class YoloOutput(torch.nn.Module):
         n_input_activation_maps: int,
         n_classes: int,
         anchors: List[List[int]],
+        train_anchors: bool = True,
         *args,
         **kwargs,
     ):
@@ -28,7 +29,7 @@ class YoloOutput(torch.nn.Module):
         anchors_data = torch.tensor(anchors, dtype=torch.float32)
         self.anchors = torch.nn.Parameter(
             anchors_data.reshape((anchors_data.size(0), anchors_data.size(1), 1, 1)),
-            requires_grad=False,
+            requires_grad=train_anchors,
         )
 
     def forward(self, features: torch.Tensor):

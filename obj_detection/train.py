@@ -141,13 +141,14 @@ def train(
                     obj_gain=obj_loss_gain,
                     no_obj_gain=no_obj_loss_gain,
                     ignore_obj_thr=0.7,
-                    filter_iou=batch_counter > lr_rampup_period,
+                    # filter_iou=batch_counter > lr_rampup_period,
                 )
             )
 
-            # position_loss = torch.div(position_loss, dataloader.batch_size)
-            # obj_detection_loss = torch.div(obj_detection_loss, dataloader.batch_size)
-            # classification_loss = torch.div(classification_loss, dataloader.batch_size)
+            # ann_count = sum([len(ann["boxes"]) for ann in anns])
+            # position_loss = torch.div(position_loss, ann_count)
+            # obj_detection_loss = torch.div(obj_detection_loss, ann_count)
+            # classification_loss = torch.div(classification_loss, ann_count)
 
             total_loss = position_loss + obj_detection_loss + classification_loss
             loss = total_loss
@@ -159,7 +160,7 @@ def train(
             optimizer.step()
             scheduler.step()
 
-            if batch_counter % 500 == 499:
+            if batch_counter % 100 == 99:
                 cnn.save_model("last", device=device)
                 dataloader.change_input_size()
 
