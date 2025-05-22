@@ -4,6 +4,7 @@ from obj_detection import train, model, data_loader
 from obj_detection.lr_functions import (
     YoloObjDetectionRampUpLR,
 )
+import os
 
 if __name__ == "__main__":
     if torch.cuda.is_available():
@@ -13,13 +14,15 @@ if __name__ == "__main__":
 
     logging.info("Loading Training set ")
     dataset = data_loader.CocoDataset(
-        "/data/ssd1/Datasets_old/Coco/train2017",
-        "/data/ssd1/Datasets_old/Coco/annotations/instances_train2017.json",
+        os.path.join(os.environ["DATASET_PATH"], "/train2017"),
+        os.path.join(
+            os.environ["DATASET_PATH"], "/annotations/instances_train2017.json"
+        ),
     )
     logging.info("Loading validation set ")
     validation_dataset = data_loader.CocoDataset(
-        "/data/ssd1/Datasets_old/Coco/val2017",
-        "/data/ssd1/Datasets_old/Coco/annotations/instances_val2017.json",
+        os.path.join(os.environ["DATASET_PATH"], "/val2017"),
+        os.path.join(os.environ["DATASET_PATH"], "/annotations/instances_val2017.json"),
     )
 
     logging.info("Creating data loader for training set")

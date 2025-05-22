@@ -1,7 +1,23 @@
 [project]
-name = "cnn-demo"
+name = "obj_detection"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "dvc[s3]",
+    "torch",
+    "torchvision",
+    "torchmetrics",
+    "opencv-python-headless",
+    "pycocotools",
+    "matplotlib",
+    "mlflow",
+]
+
+[tool.setuptools]
+package-dir = { "" = "." }
+include-package-data = true
+
+[tool.setuptools.packages]
+find = { namespaces = false }
