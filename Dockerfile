@@ -14,6 +14,7 @@ COPY --from=builder /home/.venv .venv
 ENV VIRTUAL_ENV="/home/.venv"
 ENV PATH="/home/.venv/bin:$PATH"
 COPY ./datasets/ ./datasets/
+COPY obj_detection/ ./obj_detection/
 COPY train_object_detection.py .
 COPY start.sh .
 

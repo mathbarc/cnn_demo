@@ -30,7 +30,7 @@ def calculate_anchors(dataset, n_anchors: int):
 
         data.extend(boxes)
 
-    data = numpy.array(data, copy=False).astype(numpy.float32)
+    data = numpy.asarray(data).astype(numpy.float32)
     # define criteria and apply kmeans()
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
     _, _, center = cv2.kmeans(
@@ -86,7 +86,7 @@ class CocoDataset(Dataset):
 
             data.extend(boxes)
 
-        data = numpy.array(data, copy=False).astype(numpy.float32)
+        data = numpy.asarray(data).astype(numpy.float32)
         # define criteria and apply kmeans()
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
         _, _, center = cv2.kmeans(

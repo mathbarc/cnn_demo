@@ -14,15 +14,19 @@ if __name__ == "__main__":
 
     logging.info("Loading Training set ")
     dataset = data_loader.CocoDataset(
-        os.path.join(os.environ["DATASET_PATH"], "/train2017"),
+        os.path.join(os.environ["DATASET_PATH"], "coco_dataset/2017/train2017"),
         os.path.join(
-            os.environ["DATASET_PATH"], "/annotations/instances_train2017.json"
+            os.environ["DATASET_PATH"],
+            "coco_dataset/2017/annotations/instances_train2017.json",
         ),
     )
     logging.info("Loading validation set ")
     validation_dataset = data_loader.CocoDataset(
-        os.path.join(os.environ["DATASET_PATH"], "/val2017"),
-        os.path.join(os.environ["DATASET_PATH"], "/annotations/instances_val2017.json"),
+        os.path.join(os.environ["DATASET_PATH"], "coco_dataset/2017/val2017"),
+        os.path.join(
+            os.environ["DATASET_PATH"],
+            "coco_dataset/2017/annotations/instances_val2017.json",
+        ),
     )
 
     logging.info("Creating data loader for training set")
