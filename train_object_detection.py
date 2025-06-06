@@ -30,7 +30,7 @@ if __name__ == "__main__":
     )
 
     logging.info("Creating data loader for training set")
-    dataloader = data_loader.ObjDetectionDataLoader(dataset, 64, 368, 512)
+    dataloader = data_loader.ObjDetectionDataLoader(dataset, 16, 368, 512)
 
     n_anchors = 5
     logging.info("Calculating anchors ... {n_anchors}")
