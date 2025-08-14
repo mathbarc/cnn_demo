@@ -14,7 +14,6 @@ dependencies = [
     "matplotlib",
     "mlflow",
 ]
-
 [tool.setuptools]
 package-dir = { "" = "." }
 include-package-data = true
